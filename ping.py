@@ -279,7 +279,7 @@ def attendance_check_fragment():
 
     with col2:
         edited_right = st.data_editor(
-            df_right[['순서', '이름', '부수', selected_adj, '참석']],
+            df_right[['순서', '이름', '참석', '부수', selected_adj]],
             hide_index=True,
             width="stretch",
             column_config={"참석": st.column_config.CheckboxColumn("오늘 참석", default=False)},
