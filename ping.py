@@ -269,7 +269,7 @@ def attendance_check_fragment():
     with col1:
         # st.data_editor: 사용자가 웹상에서 표를 직접 수정할 수 있게 함
         edited_left = st.data_editor(
-            df_left[['순서', '이름', '부수', selected_adj, '참석']],
+            df_left[['순서', '이름', '참석', '부수', selected_adj]],
             hide_index=True,
             width="stretch",
             # column_config: 특정 열을 체크박스 형태의 인터페이스로 설정
