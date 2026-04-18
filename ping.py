@@ -168,54 +168,94 @@ selected_adj = st.sidebar.selectbox(
 # 5. 데이터 로딩 및 Pandas 연계
 # ==========================================
 # 데이터를 불러오거나 처음 실행 시 가짜(Dummy) 데이터를 만드는 함수
-def load_data():
+# def load_data():
+def load_data(uploaded_file=None):
     """
-    CSV 파일을 읽어 Pandas DataFrame으로 변환합니다.
-    파일이 없으면 초기 샘플 데이터를 생성합니다.
+    1. 사용자가 파일을 업로드하면 해당 파일을 읽습니다.
+    2. 업로드된 파일이 없으면 기존 로컬 'member_list.csv'를 찾습니다.
+    3. 둘 다 없으면 기본 더미 데이터를 생성합니다.
     """
-    if not os.path.exists(FILE_NAME):
-        # 파일이 없을 경우 더미 데이터 생성 로직
-        data = []
-        for i in range(1, 31):
-            g_val = random.randint(1, 13)
-            data.append({
-                 "순서": i,
-                 "이름": f"회원{i}",
-                 "성별": random.choice(["남", "여"]),
-                 "나이": random.randint(20, 75),
-                 "부수": f"{g_val}부",
-                 "부수_조정1": 0.0,
-                 "부수_조정2": 0.0,
-                 "부수_조정3": 0.0,
-                 f"출석_{CURRENT_DATE}": random.choice(['Y', 'N'])
-            })
-        df_n = pd.DataFrame(data)
-        # utf-8-sig: 엑셀에서 한글 깨짐 방지를 위한 인코딩
-        df_n.to_csv(FILE_NAME, index=False, encoding='utf-8-sig')
-        return df_n
+    if uploaded_file is not None:
+        try:
+            return pd.read_csv(uploaded_file, encoding='utf-8-sig')
+        except:
+            return pd.read_csv(uploaded_file, encoding='cp949')
 
-    try:
-        return pd.read_csv(FILE_NAME, encoding='utf-8-sig')
-    except UnicodeDecodeError:
-        return pd.read_csv(FILE_NAME, encoding='cp949')
+    if os.path.exists(FILE_NAME):
+        try:
+            return pd.read_csv(FILE_NAME, encoding='utf-8-sig')
+        except:
+            return pd.read_csv(FILE_NAME, encoding='cp949')
+
+    # 기본 더미 데이터 생성 (기존 로직 유지)
+    data = []
+    for i in range(1, 31):
+        g_val = random.randint(1, 13)
+        data.append({
+            "순서": i, "이름": f"회원{i}", "성별": random.choice(["남", "여"]),
+            "나이": random.randint(20, 75), "부수": f"{g_val}부",
+            "부수_조정1": 0.0, "부수_조정2": 0.0, "부수_조정3": 0.0,
+            f"출석_{CURRENT_DATE}": 'N'
+        })
+    return pd.DataFrame(data)
+    # """
+    # CSV 파일을 읽어 Pandas DataFrame으로 변환합니다.
+    # 파일이 없으면 초기 샘플 데이터를 생성합니다.
+    # """
+    # if not os.path.exists(FILE_NAME):
+    #     # 파일이 없을 경우 더미 데이터 생성 로직
+    #     data = []
+    #     for i in range(1, 31):
+    #         g_val = random.randint(1, 13)
+    #         data.append({
+    #              "순서": i,
+    #              "이름": f"회원{i}",
+    #              "성별": random.choice(["남", "여"]),
+    #              "나이": random.randint(20, 75),
+    #              "부수": f"{g_val}부",
+    #              "부수_조정1": 0.0,
+    #              "부수_조정2": 0.0,
+    #              "부수_조정3": 0.0,
+    #              f"출석_{CURRENT_DATE}": random.choice(['Y', 'N'])
+    #         })
+    #     df_n = pd.DataFrame(data)
+    #     # utf-8-sig: 엑셀에서 한글 깨짐 방지를 위한 인코딩
+    #     df_n.to_csv(FILE_NAME, index=False, encoding='utf-8-sig')
+    #     return df_n
+    #
+    # try:
+    #     return pd.read_csv(FILE_NAME, encoding='utf-8-sig')
+    # except UnicodeDecodeError:
+    #     return pd.read_csv(FILE_NAME, encoding='cp949')
 
 # 데이터 로드 실행
-df = load_data()
+# [중요] 앱 시작 시 가장 먼저 실행되어야 함
+# 세션 스테이트에 main_df가 없으면 즉시 로드하여 할당
+if 'main_df' not in st.session_state:
+    st.session_state.main_df = load_data()
+# df = load_data()
 
 # ==========================================
-# 6. 데이터 전처리 (Pandas 실무 적용)
+# 6. 데이터 전처리 (st.session_state.main_df 사용)
 # ==========================================
-if '이름' in df.columns:
+
+# 기존에 df 라고 되어 있던 부분을 모두 아래처럼 변경합니다.
+if '이름' in st.session_state.main_df.columns:
     # dropna: 이름이 없는 행(Null) 제거
-    df = df.dropna(subset=['이름'])
-    # 불필요한 공백이나 잘못된 문자열 정제
-    df = df[df['이름'].astype(str).str.lower() != 'nan']
-    df = df[df['이름'].astype(str).str.strip() != '']
+    st.session_state.main_df = st.session_state.main_df.dropna(subset=['이름'])
 
-# 선택된 날짜에 맞는 출석 열이 없으면 새로 생성 (기본값 'N')
+    # 불필요한 공백이나 잘못된 문자열 정제
+    st.session_state.main_df = st.session_state.main_df[
+        st.session_state.main_df['이름'].astype(str).str.lower() != 'nan'
+        ]
+    st.session_state.main_df = st.session_state.main_df[
+        st.session_state.main_df['이름'].astype(str).str.strip() != ''
+        ]
+
+# 선택된 날짜에 맞는 출석 열이 없으면 새로 생성
 col_date = f"출석_{CURRENT_DATE}"
-if col_date not in df.columns:
-    df[col_date] = 'N'
+if col_date not in st.session_state.main_df.columns:
+    st.session_state.main_df[col_date] = 'N'
 
 # ==========================================
 # 7. 커스텀 CSS 주입
@@ -252,10 +292,49 @@ if 'attendees_count' not in st.session_state:
 @st.fragment
 def attendance_check_fragment():
 # with tab_home:
-    st.markdown(f"### 참석 현황")
+    st.markdown("### 📂 클럽 회원 명부 관리")
+
+# [추가] 클럽별 파일 업로드 기능
+    # 이 부분을 통해 각 클럽은 자신의 PC에 있는 CSV를 불러올 수 있습니다.
+    up_col1, up_col2 = st.columns([3, 1])
+    with up_col1:
+        uploaded_file = st.file_uploader("클럽 회원 명부(CSV)를 업로드하세요", type=['csv'], help="기존 양식과 동일한 CSV 파일을 선택하세요.")
+    with up_col2:
+        st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
+        if st.button("🚀 업로드 파일 적용", use_container_width=True):
+            if uploaded_file:
+                st.session_state.main_df = load_data(uploaded_file)
+                st.success("새로운 회원 명부가 적용되었습니다.")
+                st.rerun()
+
+    st.divider()
+    st.markdown(f"### 📋 {CURRENT_DATE} 참석 현황")
+
+    # 세션에 저장된 데이터를 사용하도록 변경
+    working_df = st.session_state.main_df.copy()
+
+    # 데이터 전처리 (이름 없는 행 제거)
+    working_df = working_df.dropna(subset=['이름'])
+    working_df = working_df[working_df['이름'].astype(str).str.strip() != '']
+
+    # 날짜별 출석 컬럼 확인
+    col_date = f"출석_{CURRENT_DATE}"
+    if col_date not in working_df.columns:
+        working_df[col_date] = 'N'
+
+    # 체크박스용 True/False 변환
+    working_df['참석'] = working_df[col_date].apply(lambda x: True if x == 'Y' else False)
 
     # [Pandas] 원본 데이터프레임을 복사하여 편집용 데이터프레임 생성
-    display_df = df.copy()
+
+
+    # [수정 포인트] 전역 변수 df 대신 세션 스테이트의 데이터를 가져옵니다.
+    if 'main_df' in st.session_state:
+        display_df = st.session_state.main_df.copy()
+    else:
+        # 혹시라도 데이터가 없을 경우를 대비한 안전장치
+        st.error("데이터를 불러올 수 없습니다. 메인 페이지를 새로고침 하세요.")
+        return
     # CSV의 'Y/N' 문자열을 Streamlit 체크박스에서 인식할 수 있도록 True/False로 변환
     display_df['참석'] = display_df[col_date].apply(lambda x: True if x == 'Y' else False)
 
@@ -279,7 +358,7 @@ def attendance_check_fragment():
 
     with col2:
         edited_right = st.data_editor(
-            df_right[['순서', '이름', '참석', '부수', selected_adj]],
+            df_right[['순서', '이름', '부수', selected_adj, '참석']],
             hide_index=True,
             width="stretch",
             column_config={"참석": st.column_config.CheckboxColumn("오늘 참석", default=False)},
@@ -318,19 +397,43 @@ def attendance_check_fragment():
     # 우측 상단(col_date_input)에 저장 버튼 배치 (File I/O)
     # ==========================================
     if is_admin:  # 관리자 권한이 있을 때만 버튼 노출
-        if st.button("출석 정보 최종 저장", type="primary", use_container_width=True):
-            # 편집된 데이터(edited_df)의 값을 원본(df)에 동기화
-            df[col_date] = edited_df['참석'].apply(lambda x: 'Y' if x else 'N')
-            # 수정
-            for col in ['이름', '부수', selected_adj]:
-                df[col] = edited_df[col]
+        save_col1, save_col2 = st.columns(2)
 
-            # [Python] 최종 변경 내용을 다시 CSV 파일로 물리적 저장
-            df.to_csv(FILE_NAME, index=False, encoding='utf-8-sig')
+        with save_col1:
+            if st.button("💾 서버/PC에 즉시 저장", type="primary", use_container_width=True, help="서버의 member_list.csv를 갱신합니다."):
+                # 데이터 동기화
+                st.session_state.main_df[col_date] = edited_df['참석'].apply(lambda x: 'Y' if x else 'N')
+                for col in ['이름', '부수', selected_adj]:
+                    st.session_state.main_df[col] = edited_df[col]
 
-            # 성공 메시지 출력 후 페이지 재실행(st.rerun)을 통해 화면 갱신
-            st.success("저장 완료! '운영 설정' 탭으로 이동하세요.")
-            st.rerun()
+                st.session_state.main_df.to_csv(FILE_NAME, index=False, encoding='utf-8-sig')
+                st.success("파일 저장 완료!")
+                st.rerun()
+
+        with save_col2:
+            # [추가] 모바일 사용자를 위한 CSV 다운로드 기능
+            # 스마트폰에서 조작 후 결과가 포함된 파일을 본인 폰으로 소장할 수 있게 합니다.
+            csv_data = st.session_state.main_df.to_csv(index=False, encoding='utf-8-sig')
+            st.download_button(
+                label="📥 현재 명부 내 폰으로 다운로드",
+                data=csv_data,
+                file_name=f"클럽명부_{CURRENT_DATE}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        # if st.button("출석 정보 최종 저장", type="primary", use_container_width=True):
+        #     # 편집된 데이터(edited_df)의 값을 원본(df)에 동기화
+        #     df[col_date] = edited_df['참석'].apply(lambda x: 'Y' if x else 'N')
+        #     # 수정
+        #     for col in ['이름', '부수', selected_adj]:
+        #         df[col] = edited_df[col]
+        #
+        #     # [Python] 최종 변경 내용을 다시 CSV 파일로 물리적 저장
+        #     df.to_csv(FILE_NAME, index=False, encoding='utf-8-sig')
+        #
+        #     # 성공 메시지 출력 후 페이지 재실행(st.rerun)을 통해 화면 갱신
+        #     st.success("저장 완료! '운영 설정' 탭으로 이동하세요.")
+        #     st.rerun()
 
 with tab_home:
     attendance_check_fragment()
@@ -391,6 +494,13 @@ def config_setup_fragment():
 
         # [Streamlit 권한 제어] 관리자(is_admin)일 때만 실행 버튼 노출
         if is_admin:
+            # [추가] 함수 내부에서 사용할 df를 세션 스테이트에서 가져옵니다.
+            if 'main_df' not in st.session_state:
+                st.error("데이터가 로드되지 않았습니다.")
+                return
+
+            df = st.session_state.main_df  # 이 줄을 추가하면 아래 코드들을 수정할 필요가 없습니다.
+
             if st.button(btn_label, width="stretch", type="primary"):
                 # st.session_state: 페이지가 재실행되어도 유지해야 할 설정값들을 딕셔너리 형태로 저장
                 attendees = df[df[col_date] == 'Y'].copy()
@@ -584,6 +694,8 @@ with tab_team:
             st.warning(" '운영 설정' 탭 하단에서 제비뽑기를 모두 완료해야 결과를 볼 수 있습니다.")
         else:
             # 2. 데이터 준비 (Pandas Data Prep)
+            # [수정] 세션에 저장된 메인 데이터를 df라는 이름으로 꺼내옵니다.
+            df = st.session_state.main_df
             # 참석자만 필터링하여 실력(부수) 순으로 정렬
             attendees = df[df[col_date] == 'Y'].copy()
             attendees['부수_숫자'] = attendees['부수'].apply(extract_busu)
@@ -729,8 +841,16 @@ with tab_match:
         m_data = []
         for i, (a, b) in enumerate(all_matches):
             # st.session_state.matrix에서 현재 점수를 실시간으로 가져옴
-            s1, s2 = st.session_state.matrix.loc[a, b], st.session_state.matrix.loc[b, a]
+            # s1, s2 = st.session_state.matrix.loc[a, b], st.session_state.matrix.loc[b, a]
+            # 844라인 수정 제안
+            if a in st.session_state.matrix.index and b in st.session_state.matrix.columns:
+                s1, s2 = st.session_state.matrix.loc[a, b], st.session_state.matrix.loc[b, a]
+            else:
+                # 키가 없으면 0이나 빈 값으로 처리
+                s1, s2 = 0, 0
+
             status = " 종료" if (not np.isnan(s1) and (s1 + s2 > 0)) else " 대기"
+
 
             m_data.append({
                 "순서": i + 1,
