@@ -182,12 +182,23 @@ if DEV_MODE:
     st.sidebar.success("🛠️ 현재 개발 모드(DEV_MODE)입니다.\n로컬 파일이 자동 로드/저장됩니다.")
 else:
     st.sidebar.info("📱 운영 모드입니다.\n스마트폰/PC에서 명단 파일을 업로드하세요.")
-    uploaded_file = st.sidebar.file_uploader("명단 파일(CSV) 업로드", type=['csv'])
+    uploaded_file = st.sidebar.file_uploader("명단 파일(CSV) 업로드")
+
     if uploaded_file:
-        if st.sidebar.button("파일 적용하기"):
-            st.session_state.main_df = load_data(uploaded_file)
-            st.success("새로운 명부가 적용되었습니다.")
-            st.rerun()
+        # 파이썬 내부에서 확장자가 csv인지 직접 검증
+        if not uploaded_file.name.lower().endswith('.csv'):
+            st.sidebar.error("❌ CSV 파일만 업로드 가능합니다. 확장자를 확인해주세요.")
+        else:
+            if st.sidebar.button("파일 적용하기"):
+                st.session_state.main_df = load_data(uploaded_file)
+                st.sidebar.success("새로운 명부가 적용되었습니다.")
+                st.rerun()
+    # uploaded_file = st.sidebar.file_uploader("명단 파일(CSV) 업로드", type=['csv'])
+    # if uploaded_file:
+    #     if st.sidebar.button("파일 적용하기"):
+    #         st.session_state.main_df = load_data(uploaded_file)
+    #         st.success("새로운 명부가 적용되었습니다.")
+    #         st.rerun()
 
 selected_date = st.date_input("시합 일자 선택", datetime.now(), disabled=not is_admin)
 CURRENT_DATE = selected_date.strftime('%Y-%m-%d')
