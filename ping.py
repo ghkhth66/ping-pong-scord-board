@@ -6,16 +6,23 @@ import random
 import re
 from datetime import datetime
 import math
+import io  # [추가] 메모리 기반 파일 처리를 위한 모듈
+
+# =========================================================
+# ⚙️ [핵심] 개발 모드 스위치 및 전역 변수 설정
+# =========================================================
+DEV_MODE = False  # 개발 중일 때는 True (로컬 파일 자동 로드/저장), 실제 스마트폰 운영 시에는 False로 변경!
+
+FILE_NAME = 'member_list.csv'
+CUMULATIVE_FILE = 'cumulative_record.csv'  # 누적 기록 파일명 추가
+CURRENT_DATE = datetime.now().strftime('%Y-%m-%d')
+SAVE_FILE_NAME = f"{CURRENT_DATE}_경기결과.csv"
 
 st.set_page_config(
     page_title="동호회 운영 시스템",
     layout="wide",  # 화면 전체 너비 사용
     initial_sidebar_state="expanded"  # 사이드바를 기본적으로 열어둠
 )
-
-FILE_NAME = 'member_list.csv'
-CURRENT_DATE = datetime.now().strftime('%Y-%m-%d')
-SAVE_FILE_NAME = f"{CURRENT_DATE}_경기결과.csv"
 
 # CSS 주입: 버튼 색상 커스텀 및 레이아웃
 st.markdown("""
@@ -27,7 +34,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
 # [핵심 로직: 설정 변경 시 데이터 강제 초기화]
 def reset_config_state():
     """운영 설정이 변경될 때 호출하여 데이터 꼬임을 방지합니다."""
@@ -37,7 +43,6 @@ def reset_config_state():
     for k in keys_to_delete:
         if k in st.session_state: del st.session_state[k]
 
-
 def extract_busu(busu_str):
     try:
         nums = re.findall(r'\d+', str(busu_str))
@@ -45,9 +50,7 @@ def extract_busu(busu_str):
     except:
         return 9.0
 
-
 def get_info_html(live_count, live_names_display, cfg=None):
-
     if cfg:
         # 경기 설정(cfg) 유무에 따라 조건부 렌더링
         is_individual = cfg.get('is_individual')
@@ -75,7 +78,6 @@ def get_info_html(live_count, live_names_display, cfg=None):
                 <div style="font-size: 20px; font-weight: bold; color: #007bff;">{live_names_display}</div>
             </div>""" if live_count > 0 else "<div style='background-color:#e8f4f9; padding:15px; border-radius:8px;'><b>현재 체크된 인원 (0명):</b> 없음</div>"
 
-
 def load_data(uploaded_file=None):
     """최우선 순위: 업로드 파일 > 로컬 파일 > 더미데이터"""
     # 1. 업로드된 파일이 있는 경우
@@ -85,8 +87,8 @@ def load_data(uploaded_file=None):
         except:
             return pd.read_csv(uploaded_file, encoding='cp949')
 
-    # 2. 로컬 파일이 존재하는 경우 (개발자 모드)
-    if os.path.exists(FILE_NAME):
+    # 2. 로컬 파일이 존재하는 경우 (개발자 모드일 때만 자동 로드)
+    if DEV_MODE and os.path.exists(FILE_NAME):
         try:
             return pd.read_csv(FILE_NAME, encoding='utf-8-sig')
         except:
@@ -97,7 +99,6 @@ def load_data(uploaded_file=None):
              "나이": random.randint(20, 75), "부수": f"{random.randint(1, 13)}부",
              "부수_조정1": 0.0, "부수_조정2": 0.0, "부수_조정3": 0.0} for i in range(1, 31)]
     return pd.DataFrame(data)
-
 
 def save_and_download_data(df, file_name):
     """데이터를 로컬에 저장하고, 동시에 브라우저 다운로드 버튼 제공"""
@@ -113,24 +114,38 @@ def save_and_download_data(df, file_name):
     st.download_button(label="📥 결과 파일 다운로드", data=csv_data, file_name=file_name, mime="text/csv",
                        use_container_width=True)
 
-
 # ----------------- 초기화 -----------------
 if 'main_df' not in st.session_state: st.session_state.main_df = load_data()
 if 'attendance_confirmed' not in st.session_state: st.session_state.attendance_confirmed = False
 if 'config_confirmed' not in st.session_state: st.session_state.config_confirmed = False
 
-
 def save_daily_results(save_file_name, current_date):
-    """현재 세션의 조별 및 개인별 매트릭스 저장"""
-    if 'matrix' in st.session_state and 'ind_matrix' in st.session_state:
-        with open(save_file_name, 'w', encoding='utf-8-sig') as f:
-            f.write(f"--- 경기 일자: {current_date} ---\n\n[조별/단체전 결과]\n")
-            st.session_state.matrix.to_csv(f)
-            f.write("\n[개인별 통합 성적]\n")
-            st.session_state.ind_matrix.to_csv(f)
+    """현재 세션의 조별 및 개인별 매트릭스 로컬 저장 (DEV_MODE 전용)"""
+    if DEV_MODE and 'matrix' in st.session_state and 'ind_matrix' in st.session_state:
+        try:
+            with open(save_file_name, 'w', encoding='utf-8-sig') as f:
+                f.write(f"--- 경기 일자: {current_date} ---\n\n[조별/단체전 결과]\n")
+                st.session_state.matrix.to_csv(f)
+                f.write("\n[개인별 통합 성적]\n")
+                st.session_state.ind_matrix.to_csv(f)
+        except Exception as e:
+            st.warning(f"로컬 저장 실패: {e}")
 
+def get_results_csv_bytes():
+    """스마트폰 다운로드를 위해 결과를 메모리(Bytes)로 변환하는 함수"""
+    if 'matrix' in st.session_state and 'ind_matrix' in st.session_state:
+        output = io.StringIO()
+        output.write(f"--- 경기 일자: {CURRENT_DATE} ---\n\n[조별/단체전 결과]\n")
+        st.session_state.matrix.to_csv(output)
+        output.write("\n[개인별 통합 성적]\n")
+        st.session_state.ind_matrix.to_csv(output)
+        return output.getvalue().encode('utf-8-sig')
+    return b""
 
 def update_cumulative_record(p_a, p_b, s_a, s_b):
+    if not DEV_MODE:
+        return  # 스마트폰 환경에서는 로컬 누적 파일 직접 수정 불가 (DB 필요)
+
     if not os.path.exists(CUMULATIVE_FILE):
         df_cum = pd.DataFrame(columns=['이름', '총경기수', '승', '패', '득점', '실점'])
     else:
@@ -160,13 +175,19 @@ st.sidebar.markdown("### 관리자 메뉴")
 admin_password = st.sidebar.text_input("관리자 비밀번호", type="password")
 is_admin = (admin_password == "admin123")
 
-# 파일 업로드 (사이드바 통합)
-uploaded_file = st.sidebar.file_uploader("명단 파일(CSV) 업로드", type=['csv'])
-if uploaded_file:
-    if st.sidebar.button("파일 적용하기"):
-        st.session_state.main_df = load_data(uploaded_file)
-        st.success("새로운 명부가 적용되었습니다.")
-        st.rerun()
+# =========================================================
+# 🛠️ [수정] 사이드바 파일 업로드 (DEV_MODE 분기)
+# =========================================================
+if DEV_MODE:
+    st.sidebar.success("🛠️ 현재 개발 모드(DEV_MODE)입니다.\n로컬 파일이 자동 로드/저장됩니다.")
+else:
+    st.sidebar.info("📱 운영 모드입니다.\n스마트폰/PC에서 명단 파일을 업로드하세요.")
+    uploaded_file = st.sidebar.file_uploader("명단 파일(CSV) 업로드", type=['csv'])
+    if uploaded_file:
+        if st.sidebar.button("파일 적용하기"):
+            st.session_state.main_df = load_data(uploaded_file)
+            st.success("새로운 명부가 적용되었습니다.")
+            st.rerun()
 
 selected_date = st.date_input("시합 일자 선택", datetime.now(), disabled=not is_admin)
 CURRENT_DATE = selected_date.strftime('%Y-%m-%d')
@@ -184,9 +205,6 @@ selected_adj = st.sidebar.selectbox("부수 조정 기준", ["부수_조정1", "
 info_placeholder = st.empty()  # 정보 표시용 공간 확보
 
 tab_home, tab_config, tab_team, tab_match, tab_score = st.tabs([" 출석체크", " 운영 설정", " 조 편성 결과", " 경기 배정", " 스코어보드"])
-
-# if 'attendees_count' not in st.session_state:
-#     st.session_state.attendees_count = 0
 
 @st.fragment
 def attendance_check_fragment():
@@ -223,7 +241,6 @@ def attendance_check_fragment():
             st.session_state.main_df[col_date] = edited_df['참석'].apply(lambda x: 'Y' if x else 'N')
             st.session_state.attendance_confirmed = True
             st.rerun()
-
 
 with tab_home:
     attendance_check_fragment()
@@ -281,7 +298,9 @@ def config_setup_fragment():
             if st.button(btn_label, type=btn_type, use_container_width=True):
                 st.session_state.config = {
                     "g": g_val, "t": t_val, "s_games": s_g,
-                    "d_games": d_g, "set_count": set_c, "total_g": s_g + d_g
+                    "d_games": d_g, "set_count": set_c, "total_g": s_g + d_g,
+                    "draw_method": draw_method, "selected_adj": selected_adj,
+                    "tie_breakers": {name: random.random() for name in st.session_state.main_df['이름']}
                 }
                 st.session_state.config_confirmed = True
                 st.rerun()
@@ -298,16 +317,14 @@ def draw_process_fragment():
             cfg = st.session_state.config
 
             adj_col = cfg['selected_adj']
-            # [Pandas] 참석자('Y')만 추출 후 부수(실력) 순으로 정렬하여 밸런스 유지 준비
+            df = st.session_state.main_df
+
             attendees = df[df[col_date] == 'Y'].copy()
             attendees['부수_숫자'] = attendees['부수'].apply(extract_busu)
 
             attendees['Random'] = attendees['이름'].map(cfg['tie_breakers'])
 
-            sorted_members = attendees.sort_values(
-                ['부수_숫자', adj_col, 'Random'],
-                ascending=True
-            ).reset_index(drop=True)
+            sorted_members = attendees.sort_values(['부수_숫자', adj_col, 'Random'], ascending=True).reset_index(drop=True)
 
             # [Python] 전체 그룹 수 계산 (부수별로 잘라서 제비뽑기 진행)
             total_levels = math.ceil(len(sorted_members) / cfg['g'])
@@ -331,7 +348,7 @@ def draw_process_fragment():
                 if level < draw_level:
                     for i, (idx, row) in enumerate(current_group.iterrows()):
                         with cols[i % cfg['g']]:
-                            assigned_team = st.session_state.draw_results[row['이름']]
+                            assigned_team = st.session_state.draw_results.get(row['이름'], "-")
                             st.success(f" **{row['이름']}** ➔ **{assigned_team}조**")
 
                 # 상황 2: 현재 진행 중인 그룹 (선택 위젯 표시)
@@ -552,12 +569,9 @@ with tab_match:
 
         # [Internal Function] 결과를 CSV로 물리적 저장하는 유틸리티 // 제거 가능함 _ 260407
         def auto_save_csv_tab4():
-            with open(SAVE_FILE_NAME, 'w', encoding='utf-8-sig') as f:
-                f.write(f"--- 경기 일자: {CURRENT_DATE} ---\n")
-                f.write("\n[조별/단체전 결과]\n")
-                st.session_state.matrix.to_csv(f)  # Pandas DF를 파일 객체에 바로 써넣음
-                f.write("\n[개인별 통합 성적]\n")
-                st.session_state.ind_matrix.to_csv(f)
+            # DEV_MODE일 때만 로컬에 자동 저장, 아닐 때는 세션에만 유지
+            if DEV_MODE:
+                save_daily_results(SAVE_FILE_NAME, CURRENT_DATE)
 
 
         # [Algorithm] 라운드 로빈(Round Robin) 방식의 대진 생성 알고리즘
@@ -710,7 +724,7 @@ with tab_match:
                             st.session_state.matrix.loc[team_b, team_a] = s_b
                             auto_save_csv_tab4()
                             # [파일 관리] 일일 결과 및 누적 실적 동시 저장
-                            save_daily_results(SAVE_FILE_NAME, CURRENT_DATE)
+                            # save_daily_results(SAVE_FILE_NAME, CURRENT_DATE)
                             # 개인전이므로 조 이름에서 선수 이름만 추출하여 누적 기록 업데이트
                             p_a_name = team_a.split('(')[0].split('조')[-1].strip() if '조' in team_a else team_a
                             p_b_name = team_b.split('(')[0].split('조')[-1].strip() if '조' in team_b else team_b
@@ -886,12 +900,8 @@ with tab_score:
 
         # [Internal Function] 결과 저장 로직 (중복 방지를 위한 내부 함수화)
         def auto_save_csv():
-            with open(SAVE_FILE_NAME, 'w', encoding='utf-8-sig') as f:
-                f.write(f"--- 경기 일자: {CURRENT_DATE} ---\n")
-                f.write("\n[조별/단체전 결과]\n")
-                st.session_state.matrix.to_csv(f)
-                f.write("\n[개인별 통합 성적]\n")
-                st.session_state.ind_matrix.to_csv(f)
+            if DEV_MODE:
+                save_daily_results(SAVE_FILE_NAME, CURRENT_DATE)
 
         # [Logic] 종합 성적 계산 및 테이블 렌더링 함수
         def draw_summary_table():
@@ -1022,9 +1032,25 @@ with tab_score:
                     st.rerun()
 
         with col_ctrl3:
-            if is_admin and st.button("💾 수동 저장", type="secondary", use_container_width=True):
-                auto_save_csv()
-                st.success("저장 완료")
+            # =========================================================
+            # 🛠️ [수정] 스마트폰 다운로드 버튼 적용 (DEV_MODE 분기)
+            # =========================================================
+            if is_admin:
+                if DEV_MODE:
+                    if st.button("💾 로컬 수동 저장", type="secondary", use_container_width=True):
+                        auto_save_csv()
+                        st.success("로컬 저장 완료")
+                else:
+                    # 스마트폰/웹 환경에서는 다운로드 버튼 제공
+                    csv_bytes = get_results_csv_bytes()
+                    st.download_button(
+                        label="📥 결과 CSV 다운로드",
+                        data=csv_bytes,
+                        file_name=SAVE_FILE_NAME,
+                        mime="text/csv",
+                        type="secondary",
+                        use_container_width=True
+                    )
 
         is_fullscreen = st.session_state.get('fullscreen_table', False)
 
@@ -1045,12 +1071,6 @@ with tab_score:
                 if st.button(" 종합 결과표만 전체 화면으로 보기", type="primary"):
                     st.session_state.fullscreen_table = True
                     st.rerun()
-            with col_btn2:
-                if is_admin:  # 관리자만 수동 저장 버튼 노출
-                    if st.button(" 결과 CSV 수동 저장", type="secondary", width="stretch"):
-                        auto_save_csv()
-                        # save_daily_results(SAVE_FILE_NAME)
-                        st.success(f"저장 완료: {SAVE_FILE_NAME}")
 
             st.markdown(f"### {'조별' if not is_ind else '개인전'} 경기 결과 입력")
 
