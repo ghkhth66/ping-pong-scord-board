@@ -8,8 +8,14 @@ from datetime import datetime
 import math
 import io
 import pickle  # 다중 기기/구장 간 상태 공유를 위한 모듈
+import hashlib  # 🔒 비밀번호 암호화를 위한 모듈 추가
 
-DEV_MODE = False  # 실제 운영을 위해 False로 기본 설정
+# ==========================================
+# 🛠️ 개발자 모드 설정
+# ==========================================
+# True로 설정 시: 비밀번호 없이 관리자 권한 획득, 더미 데이터로 즉시 테스트 가능
+# False로 설정 시: 실제 운영 모드 (비밀번호 필요)
+DEV_MODE = False
 
 CURRENT_DATE = datetime.now().strftime('%Y-%m-%d')
 
@@ -28,6 +34,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ==========================================
+# [보안] 비밀번호 암호화 함수
+# ==========================================
+def hash_password(password):
+    """입력받은 비밀번호를 SHA-256 방식으로 암호화하여 반환"""
+    return hashlib.sha256(password.encode()).hexdigest()
 
 # ==========================================
 # [핵심] 구장별 데이터 저장 및 불러오기 (다중 기기 공유)
@@ -48,18 +60,11 @@ def save_room_state(room_name):
         'draw_results': st.session_state.get('draw_results'),
         'draw_completed': st.session_state.get('draw_completed')
     }
-    
-    # [추가] 개별 경기 저장 완료 상태도 함께 저장하여 동기화 유지
-    for k, v in st.session_state.items():
-        if k.startswith('saved_m'):
-            state_to_save[k] = v
-            
     try:
         with open(f"{room_name}_state.pkl", "wb") as f:
             pickle.dump(state_to_save, f)
     except Exception as e:
         st.sidebar.error(f"상태 저장 오류: {e}")
-
 
 def load_room_state(room_name):
     """구장 이름의 파일을 읽어와 현재 화면에 반영 (조회용)"""
@@ -76,13 +81,11 @@ def load_room_state(room_name):
             st.sidebar.error(f"데이터 불러오기 실패: {e}")
     return False
 
-
 def reset_config_state():
     st.session_state.config_confirmed = False
     keys_to_delete = ['matrix', 'ind_matrix', 'teams', 'draw_results']
     for k in keys_to_delete:
         if k in st.session_state: del st.session_state[k]
-
 
 def extract_busu(busu_str):
     try:
@@ -91,7 +94,6 @@ def extract_busu(busu_str):
     except:
         return 9.0
 
-
 def load_data(uploaded_file=None):
     if uploaded_file is not None:
         try:
@@ -99,12 +101,12 @@ def load_data(uploaded_file=None):
         except:
             return pd.read_csv(uploaded_file, encoding='cp949')
 
+    # 파일이 없을 경우 더미 데이터 생성 (개발/테스트용)
     data = [{"순서": i, "이름": f"회원{i}", "성별": random.choice(["남", "여"]),
              "나이": random.randint(20, 75), "부수": f"{random.randint(1, 13)}부",
              "부수_조정1": 0.0, "부수_조정2": 0.0, "부수_조정3": 0.0,
              "참석예정": random.choice(["Y", "N"])} for i in range(1, 31)]
     return pd.DataFrame(data)
-
 
 # ==========================================
 # [핵심] 누적 데이터 업데이트 로직 (메모리 기반)
@@ -138,19 +140,21 @@ def update_cumulative_record(p_a, p_b, s_a, s_b):
 
     if p_a != "선택안함" and p_b != "선택안함":
         if 'h2h_df' not in st.session_state:
-            st.session_state.h2h_df = pd.DataFrame(columns=['Player1', 'Player2', 'P1_Win', 'P2_Win', 'P1_Score', 'P2_Score'])
-        
+            st.session_state.h2h_df = pd.DataFrame(
+                columns=['Player1', 'Player2', 'P1_Win', 'P2_Win', 'P1_Score', 'P2_Score'])
+
         h2h = st.session_state.h2h_df
         p1, p2 = sorted([p_a, p_b])
-        
+
         mask = (h2h['Player1'] == p1) & (h2h['Player2'] == p2)
         if not mask.any():
-            new_row = pd.DataFrame([{'Player1': p1, 'Player2': p2, 'P1_Win': 0, 'P2_Win': 0, 'P1_Score': 0, 'P2_Score': 0}])
+            new_row = pd.DataFrame(
+                [{'Player1': p1, 'Player2': p2, 'P1_Win': 0, 'P2_Win': 0, 'P1_Score': 0, 'P2_Score': 0}])
             h2h = pd.concat([h2h, new_row], ignore_index=True)
             mask = (h2h['Player1'] == p1) & (h2h['Player2'] == p2)
-            
+
         idx = h2h[mask].index[0]
-        
+
         if p1 == p_a:
             h2h.at[idx, 'P1_Win'] += 1 if s_a > s_b else 0
             h2h.at[idx, 'P2_Win'] += 1 if s_b > s_a else 0
@@ -161,15 +165,17 @@ def update_cumulative_record(p_a, p_b, s_a, s_b):
             h2h.at[idx, 'P2_Win'] += 1 if s_a > s_b else 0
             h2h.at[idx, 'P1_Score'] += s_b
             h2h.at[idx, 'P2_Score'] += s_a
-            
+
         st.session_state.h2h_df = h2h
 
-
+# ==========================================
+# [핵심] 누적 상대 전적 팝업 창 (Dialog)
+# ==========================================
 @st.dialog("📊 역대 누적 상대 전적")
 def show_h2h_dialog(player_a, player_b):
     p1, p2 = sorted([player_a, player_b])
     h2h = st.session_state.get('h2h_df', pd.DataFrame())
-    
+
     if not h2h.empty:
         mask = (h2h['Player1'] == p1) & (h2h['Player2'] == p2)
         if mask.any():
@@ -178,32 +184,40 @@ def show_h2h_dialog(player_a, player_b):
             p2_w = record['P2_Win']
             p1_s = record['P1_Score']
             p2_s = record['P2_Score']
-            
-            st.markdown(f"<h3 style='text-align: center; color: #28a745;'>{p1} <span style='color:gray;'>vs</span> {p2}</h3>", unsafe_allow_html=True)
-            st.markdown(f"<p style='text-align: center; font-size:1.1rem;'>총 <b>{p1_w + p2_w}</b>전 맞대결</p>", unsafe_allow_html=True)
-            
+
+            st.markdown(
+                f"<h3 style='text-align: center; color: #28a745;'>{p1} <span style='color:gray;'>vs</span> {p2}</h3>",
+                unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align: center; font-size:1.1rem;'>총 <b>{p1_w + p2_w}</b>전 맞대결</p>",
+                        unsafe_allow_html=True)
+
             c1, c2 = st.columns(2)
             with c1:
-                st.info(f"<div style='text-align:center; font-size:1.2rem;'><b>{p1}</b><br><br>🏆 <b>{p1_w}</b> 승<br>🎯 {p1_s} 득점</div>", unsafe_allow_html=True)
+                st.info(
+                    f"<div style='text-align:center; font-size:1.2rem;'><b>{p1}</b><br><br>🏆 <b>{p1_w}</b> 승<br>🎯 {p1_s} 득점</div>",
+                    unsafe_allow_html=True)
             with c2:
-                st.error(f"<div style='text-align:center; font-size:1.2rem;'><b>{p2}</b><br><br>🏆 <b>{p2_w}</b> 승<br>🎯 {p2_s} 득점</div>", unsafe_allow_html=True)
-                
+                st.error(
+                    f"<div style='text-align:center; font-size:1.2rem;'><b>{p2}</b><br><br>🏆 <b>{p2_w}</b> 승<br>🎯 {p2_s} 득점</div>",
+                    unsafe_allow_html=True)
+
             st.write("")
             if st.button("닫기", use_container_width=True):
                 st.rerun()
             return
-            
+
     st.warning("아직 두 선수의 누적 맞대결 기록이 없습니다.")
     if st.button("닫기", use_container_width=True):
         st.rerun()
-
 
 # ----------------- 초기화 -----------------
 if 'main_df' not in st.session_state: st.session_state.main_df = load_data()
 if 'attendance_confirmed' not in st.session_state: st.session_state.attendance_confirmed = False
 if 'config_confirmed' not in st.session_state: st.session_state.config_confirmed = False
-if 'cum_df' not in st.session_state: st.session_state.cum_df = pd.DataFrame(columns=['이름', '총경기수', '승', '패', '득점', '실점'])
-if 'h2h_df' not in st.session_state: st.session_state.h2h_df = pd.DataFrame(columns=['Player1', 'Player2', 'P1_Win', 'P2_Win', 'P1_Score', 'P2_Score'])
+if 'cum_df' not in st.session_state: st.session_state.cum_df = pd.DataFrame(
+    columns=['이름', '총경기수', '승', '패', '득점', '실점'])
+if 'h2h_df' not in st.session_state: st.session_state.h2h_df = pd.DataFrame(
+    columns=['Player1', 'Player2', 'P1_Win', 'P2_Win', 'P1_Score', 'P2_Score'])
 
 # ==========================================
 # 사이드바: 구장 관리 및 권한 설정
@@ -218,27 +232,38 @@ if st.sidebar.button("🔄 최신 경기결과 불러오기", type="primary"):
         st.sidebar.warning("저장된 구장 데이터가 없습니다.")
 
 st.sidebar.divider()
-admin_password = st.sidebar.text_input("관리자 비밀번호 (입력 시 관리자 모드)", type="password")
 
-pw_file = f"{room_name}_pw.txt"
+# 🛠️ 권한 처리 및 비밀번호 암호화 로직
 is_admin = False
 
-if admin_password:
-    if os.path.exists(pw_file):
-        with open(pw_file, "r") as f:
-            saved_pw = f.read().strip()
-        if admin_password == saved_pw:
-            is_admin = True
-            st.sidebar.success("✅ 관리자 모드 활성화")
-        else:
-            st.sidebar.error("❌ 비밀번호가 틀렸습니다.")
-    else:
-        with open(pw_file, "w") as f:
-            f.write(admin_password)
-        is_admin = True
-        st.sidebar.success(f"✅ '{room_name}' 구장 관리자 설정 완료")
+if DEV_MODE:
+    is_admin = True
+    st.sidebar.warning("🛠️ **[개발자 모드]** 관리자 권한이 자동 부여되었습니다.")
 else:
-    st.sidebar.info("👀 현재 조회 전용(Read-only) 모드입니다.")
+    admin_password = st.sidebar.text_input("관리자 비밀번호 (입력 시 관리자 모드)", type="password")
+    pw_file = f"{room_name}_pw.txt"
+
+    if admin_password:
+        hashed_pw = hash_password(admin_password)  # 🔒 입력한 비밀번호를 암호화
+
+        if os.path.exists(pw_file):
+            with open(pw_file, "r") as f:
+                saved_pw = f.read().strip()
+
+            # 🔒 암호화된 값끼리 비교
+            if hashed_pw == saved_pw:
+                is_admin = True
+                st.sidebar.success("✅ 관리자 모드 활성화")
+            else:
+                st.sidebar.error("❌ 비밀번호가 틀렸습니다.")
+        else:
+            # 🔒 최초 설정 시 암호화된 값을 파일에 저장
+            with open(pw_file, "w") as f:
+                f.write(hashed_pw)
+            is_admin = True
+            st.sidebar.success(f"✅ '{room_name}' 구장 관리자 설정 완료")
+    else:
+        st.sidebar.info("👀 현재 조회 전용(Read-only) 모드입니다.")
 
 st.sidebar.divider()
 
@@ -270,18 +295,20 @@ CURRENT_DATE = selected_date.strftime('%Y-%m-%d')
 SAVE_FILE_NAME = f"{room_name}_{CURRENT_DATE}_경기결과.csv"
 col_date = f"출석_{CURRENT_DATE}"
 
+# ==========================================
+# [핵심] '참석예정' 컬럼을 확인하여 출석 기본값 자동 세팅
+# ==========================================
 if col_date not in st.session_state.main_df.columns:
     if '참석예정' in st.session_state.main_df.columns:
         st.session_state.main_df[col_date] = st.session_state.main_df['참석예정'].apply(
             lambda x: 'Y' if str(x).strip().upper() in ['Y', 'O', '1', 'TRUE', '참석'] else 'N'
         )
     else:
-        st.session_state.main_df[col_date] = 'N'
+        st.session_state.main_df[col_date] = 'Y'
 
 selected_adj = st.sidebar.selectbox("부수 조정 기준", ["부수_조정1", "부수_조정2", "부수_조정3"], disabled=not is_admin)
 
 tab_home, tab_config, tab_team, tab_match, tab_score = st.tabs([" 출석체크", " 운영 설정", " 조 편성 결과", " 경기 배정", " 스코어보드"])
-
 
 # ==========================================
 # 탭 1: 출석체크
@@ -306,7 +333,7 @@ def attendance_check_fragment():
     current_checked = edited_df[edited_df['참석'] == True]
     live_names = ", ".join(sorted(current_checked['이름'].tolist()))
 
-    st.info(f"<strong>현재 참석 ({len(current_checked)}명):</strong> {live_names}")
+    st.info(f"**현재 참석 ({len(current_checked)}명):** {live_names}")
 
     if is_admin:
         btn_label = "확정 완료 (참석자 저장됨)" if st.session_state.attendance_confirmed else "참석자 확정하기"
@@ -316,11 +343,11 @@ def attendance_check_fragment():
             st.session_state.attendance_confirmed = True
             save_room_state(room_name)
             st.rerun()
-            
+
         st.divider()
         st.markdown("#### 💾 최신 명단 다운로드")
-        st.info("오늘 수정한 참석 현황이 반영된 명단을 다음 모임에서도 사용하려면 아래 버튼을 눌러 다운로드하세요. 다음 모임 때 이 파일을 '명단 파일 업로드'에 올리시면 됩니다.")
-        
+        st.info("오늘 수정한 참석 현황이 반영된 명단을 다음 모임에서도 사용하려면 아래 버튼을 눌러 다운로드하세요.")
+
         csv_main = st.session_state.main_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
         st.download_button(
             label="📥 최신 명단(CSV) 다운로드",
@@ -331,9 +358,9 @@ def attendance_check_fragment():
             use_container_width=True
         )
 
+
 with tab_home:
     attendance_check_fragment()
-
 
 # ==========================================
 # 탭 2: 운영 설정
@@ -343,7 +370,7 @@ def config_setup_fragment():
     st.markdown('<div class="setting-banner">', unsafe_allow_html=True)
     c1, c2, c3, c4, c5 = st.columns([1.2, 1.2, 1.2, 1.2, 1.5])
     attendees_count = (
-                st.session_state.main_df[col_date] == 'Y').sum() if col_date in st.session_state.main_df.columns else 0
+            st.session_state.main_df[col_date] == 'Y').sum() if col_date in st.session_state.main_df.columns else 0
 
     with c1:
         st.markdown(f"#### 👥 조 구성")
@@ -385,7 +412,6 @@ def config_setup_fragment():
             st.info("관리자 전용")
     st.markdown('</div>', unsafe_allow_html=True)
 
-
 @st.fragment
 def draw_process_fragment():
     if "config" in st.session_state and st.session_state.config.get('draw_method') == '제비뽑기':
@@ -422,7 +448,7 @@ def draw_process_fragment():
                     for i, (idx, row) in enumerate(current_group.iterrows()):
                         with cols[i % cfg['g']]:
                             assigned_team = st.session_state.draw_results.get(row['이름'], "-")
-                            st.success(f" <strong>{row['이름']}</strong> ➔ **{assigned_team}조**")
+                            st.success(f" **{row['이름']}** ➔ **{assigned_team}조**")
 
                 elif level == draw_level:
                     available_options = list(range(1, cfg['g'] + 1))
@@ -500,7 +526,7 @@ def draw_process_fragment():
                 st.rerun()
         else:
             st.divider()
-            st.success(" 제비뽑기가 모두 완료되었습니다! 상단의 <strong>'조 편성 결과'</strong> 탭으로 이동하여 결과를 확인해주세요.")
+            st.success(" 제비뽑기가 모두 완료되었습니다! 상단의 **'조 편성 결과'** 탭으로 이동하여 결과를 확인해주세요.")
             if is_admin:
                 if st.button(" 제비뽑기 다시 하기", type="secondary"):
                     st.session_state.draw_level = 0
@@ -637,7 +663,7 @@ with tab_match:
         with col_title:
             st.markdown("### 경기 배정표")
         with col_info:
-            st.info(" <strong>아래 표에서 결과를 입력할 경기의 행(Row)을 클릭</strong>하면 상세 입력창이 나타납니다.")
+            st.info(" **아래 표에서 결과를 입력할 경기의 행(Row)을 클릭**하면 상세 입력창이 나타납니다.")
 
         col1, col2 = st.columns(2)
         with col1:
@@ -669,16 +695,22 @@ with tab_match:
                         m_idx = selected_match_idx
                         c1, c2, c3, c4 = st.columns([1.5, 1.5, 2.5, 1.5])
                         with c1:
-                            st.markdown(f"<div style='margin-top:8px; font-weight:bold; text-align:center;'>{team_a}</div>", unsafe_allow_html=True)
+                            st.markdown(
+                                f"<div style='margin-top:8px; font-weight:bold; text-align:center;'>{team_a}</div>",
+                                unsafe_allow_html=True)
                         with c2:
-                            res_type = st.radio(f"{team_a} 결과", ["승", "패"], horizontal=True, key=f"m{m_idx}_ind_res", label_visibility="collapsed")
+                            res_type = st.radio(f"{team_a} 결과", ["승", "패"], horizontal=True, key=f"m{m_idx}_ind_res",
+                                                label_visibility="collapsed")
                         with c3:
                             win_scores = [f"{limit}:{i}" for i in range(limit)]
                             lose_scores = [f"{i}:{limit}" for i in range(limit)]
                             display_scores = win_scores if res_type == "승" else lose_scores
-                            selected_score = st.radio("스코어 선택", display_scores, horizontal=True, key=f"m{m_idx}_ind_score", label_visibility="collapsed")
+                            selected_score = st.radio("스코어 선택", display_scores, horizontal=True,
+                                                      key=f"m{m_idx}_ind_score", label_visibility="collapsed")
                         with c4:
-                            st.markdown(f"<div style='margin-top:8px; font-weight:bold; text-align:center;'>{team_b}</div>", unsafe_allow_html=True)
+                            st.markdown(
+                                f"<div style='margin-top:8px; font-weight:bold; text-align:center;'>{team_b}</div>",
+                                unsafe_allow_html=True)
 
                         if st.button("결과 저장", type="primary", key=f"btn_save_ind_match_{m_idx}"):
                             s_a, s_b = map(int, selected_score.split(':'))
@@ -687,7 +719,7 @@ with tab_match:
 
                             p_a_name = team_a.split('(')[0].split('조')[-1].strip() if '조' in team_a else team_a
                             p_b_name = team_b.split('(')[0].split('조')[-1].strip() if '조' in team_b else team_b
-                            
+
                             update_cumulative_record(p_a_name, p_b_name, s_a, s_b)
                             save_room_state(room_name)
 
@@ -703,6 +735,7 @@ with tab_match:
                                     return [p.split('(')[0] for p in st.session_state.teams[t_idx]]
                             return list(st.session_state.ind_matrix.index)
 
+
                         team_a_players = get_team_players(team_a)
                         team_b_players = get_team_players(team_b)
 
@@ -716,141 +749,121 @@ with tab_match:
                                  [f"m{m_idx}_d_pb1_{d}" for d in range(d_games)] + \
                                  [f"m{m_idx}_d_pb2_{d}" for d in range(d_games)]
 
+
                         def get_avail(players, current_key, all_keys):
                             selected = [st.session_state[k] for k in all_keys
                                         if k in st.session_state and k != current_key and st.session_state[k] != "선택안함"]
                             return ["선택안함"] + [p for p in players if p not in selected]
+
 
                         match_results = []
                         set_limit = 3
                         set_win_scores = [f"{set_limit}:{i}" for i in range(set_limit)]
                         set_lose_scores = [f"{i}:{set_limit}" for i in range(set_limit)]
 
-                        # ==========================================
-                        # [핵심] 개별 경기 저장을 위한 내부 함수
-                        # ==========================================
-                        def save_sub_match(m_type, p_a_list, p_b_list, s_a, s_b, t_a, t_b, m_key):
-                            # 1. 개인전 기록 (단식만)
-                            if m_type == "S":
-                                p_a = p_a_list[0]
-                                p_b = p_b_list[0]
-                                if p_a != "선택안함" and p_b != "선택안함" and p_a != p_b:
-                                    st.session_state.ind_matrix.loc[p_a, p_b] = s_a
-                                    st.session_state.ind_matrix.loc[p_b, p_a] = s_b
-                                    update_cumulative_record(p_a, p_b, s_a, s_b)
-                            
-                            # 2. 조별 승점 누적 (기존 점수에 +1)
-                            cur_a = st.session_state.matrix.loc[t_a, t_b]
-                            cur_b = st.session_state.matrix.loc[t_b, t_a]
-                            if np.isnan(cur_a): cur_a = 0
-                            if np.isnan(cur_b): cur_b = 0
-                            
-                            if s_a > s_b: cur_a += 1
-                            elif s_b > s_a: cur_b += 1
-                                
-                            st.session_state.matrix.loc[t_a, t_b] = cur_a
-                            st.session_state.matrix.loc[t_b, t_a] = cur_b
-                            
-                            # 3. 완료 상태 저장
-                            st.session_state[m_key] = True
-                            save_room_state(room_name)
-
                         if s_games > 0:
                             st.markdown("##### 단식 경기")
                             for s in range(s_games):
-                                match_key = f"saved_m{m_idx}_s{s}"
-                                is_saved = st.session_state.get(match_key, False)
-                                
-                                c1, c2, c3, c4, c5, c6 = st.columns([1.2, 2.2, 1.5, 2.5, 2.2, 1.2])
+                                c1, c2, c3, c4, c5 = st.columns([1.2, 2.5, 2, 3, 2.5])
                                 with c1:
-                                    st.markdown(f"<div style='margin-top:8px; font-weight:bold; color:#1f77b4;'>단식 {s + 1}</div>", unsafe_allow_html=True)
+                                    st.markdown(
+                                        f"<div style='margin-top:8px; font-weight:bold; color:#1f77b4;'>단식 {s + 1}</div>",
+                                        unsafe_allow_html=True)
                                 with c2:
                                     k_a = f"m{m_idx}_s_pa_{s}"
                                     avail_a = get_avail(team_a_players, k_a, a_keys)
-                                    p_a = st.selectbox(f"{team_a} 선수", avail_a, key=k_a, label_visibility="collapsed", disabled=is_saved)
+                                    p_a = st.selectbox(f"{team_a} 선수", avail_a, key=k_a, label_visibility="collapsed")
                                 with c3:
-                                    res_type = st.radio("결과", ["승", "패"], horizontal=True, key=f"m{m_idx}_s_res_{s}", label_visibility="collapsed", disabled=is_saved)
+                                    res_type = st.radio("결과", ["승", "패"], horizontal=True, key=f"m{m_idx}_s_res_{s}",
+                                                        label_visibility="collapsed")
                                 with c4:
                                     display_scores = set_win_scores if res_type == "승" else set_lose_scores
-                                    selected_score = st.radio("스코어", display_scores, horizontal=True, key=f"m{m_idx}_s_score_{s}", label_visibility="collapsed", disabled=is_saved)
+                                    selected_score = st.radio("스코어", display_scores, horizontal=True,
+                                                              key=f"m{m_idx}_s_score_{s}", label_visibility="collapsed")
                                 with c5:
                                     k_b = f"m{m_idx}_s_pb_{s}"
                                     avail_b = get_avail(team_b_players, k_b, b_keys)
-                                    p_b = st.selectbox(f"{team_b} 선수", avail_b, key=k_b, label_visibility="collapsed", disabled=is_saved)
-                                
+                                    p_b = st.selectbox(f"{team_b} 선수", avail_b, key=k_b, label_visibility="collapsed")
+
                                 s_a, s_b = map(int, selected_score.split(':'))
-                                match_results.append(("S", [p_a], s_a, s_b, [p_b], match_key))
-                                
-                                with c6:
-                                    if is_saved:
-                                        st.markdown("<div style='margin-top:8px; color:#28a745; font-weight:bold;'>✅ 완료</div>", unsafe_allow_html=True)
-                                    else:
-                                        if st.button("저장", key=f"btn_save_s_{m_idx}_{s}"):
-                                            save_sub_match("S", [p_a], [p_b], s_a, s_b, team_a, team_b, match_key)
-                                            st.rerun()
+                                match_results.append(("S", p_a, s_a, s_b, p_b))
 
                         if d_games > 0:
                             st.markdown("##### 복식 경기")
                             for d in range(d_games):
-                                match_key = f"saved_m{m_idx}_d{d}"
-                                is_saved = st.session_state.get(match_key, False)
-                                
-                                c1, c2, c3, c4, c5, c6 = st.columns([1.2, 2.2, 1.5, 2.5, 2.2, 1.2])
+                                c1, c2, c3, c4, c5 = st.columns([1.2, 2.5, 2, 3, 2.5])
                                 with c1:
-                                    st.markdown(f"<div style='margin-top:32px; font-weight:bold; color:#ff7f0e;'>복식 {d + 1}</div>", unsafe_allow_html=True)
+                                    st.markdown(
+                                        f"<div style='margin-top:32px; font-weight:bold; color:#ff7f0e;'>복식 {d + 1}</div>",
+                                        unsafe_allow_html=True)
                                 with c2:
                                     k_a1 = f"m{m_idx}_d_pa1_{d}"
                                     avail_a1 = get_avail(team_a_players, k_a1, a_keys)
-                                    p_a1 = st.selectbox(f"{team_a} 선수1", avail_a1, key=k_a1, label_visibility="collapsed", disabled=is_saved)
+                                    p_a1 = st.selectbox(f"{team_a} 선수1", avail_a1, key=k_a1,
+                                                        label_visibility="collapsed")
 
                                     k_a2 = f"m{m_idx}_d_pa2_{d}"
                                     avail_a2 = get_avail(team_a_players, k_a2, a_keys)
-                                    p_a2 = st.selectbox(f"{team_a} 선수2", avail_a2, key=k_a2, label_visibility="collapsed", disabled=is_saved)
+                                    p_a2 = st.selectbox(f"{team_a} 선수2", avail_a2, key=k_a2,
+                                                        label_visibility="collapsed")
                                 with c3:
                                     st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
-                                    res_type = st.radio("결과", ["승", "패"], horizontal=True, key=f"m{m_idx}_d_res_{d}", label_visibility="collapsed", disabled=is_saved)
+                                    res_type = st.radio("결과", ["승", "패"], horizontal=True, key=f"m{m_idx}_d_res_{d}",
+                                                        label_visibility="collapsed")
                                 with c4:
                                     st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
                                     display_scores = set_win_scores if res_type == "승" else set_lose_scores
-                                    selected_score = st.radio("스코어", display_scores, horizontal=True, key=f"m{m_idx}_d_score_{d}", label_visibility="collapsed", disabled=is_saved)
+                                    selected_score = st.radio("스코어", display_scores, horizontal=True,
+                                                              key=f"m{m_idx}_d_score_{d}", label_visibility="collapsed")
                                 with c5:
                                     k_b1 = f"m{m_idx}_d_pb1_{d}"
                                     avail_b1 = get_avail(team_b_players, k_b1, b_keys)
-                                    p_b1 = st.selectbox(f"{team_b} 선수1", avail_b1, key=k_b1, label_visibility="collapsed", disabled=is_saved)
+                                    p_b1 = st.selectbox(f"{team_b} 선수1", avail_b1, key=k_b1,
+                                                        label_visibility="collapsed")
 
                                     k_b2 = f"m{m_idx}_d_pb2_{d}"
                                     avail_b2 = get_avail(team_b_players, k_b2, b_keys)
-                                    p_b2 = st.selectbox(f"{team_b} 선수2", avail_b2, key=k_b2, label_visibility="collapsed", disabled=is_saved)
+                                    p_b2 = st.selectbox(f"{team_b} 선수2", avail_b2, key=k_b2,
+                                                        label_visibility="collapsed")
 
                                 s_a, s_b = map(int, selected_score.split(':'))
-                                match_results.append(("D", [p_a1, p_a2], s_a, s_b, [p_b1, p_b2], match_key))
-                                
-                                with c6:
-                                    if is_saved:
-                                        st.markdown("<div style='margin-top:32px; color:#28a745; font-weight:bold;'>✅ 완료</div>", unsafe_allow_html=True)
-                                    else:
-                                        st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
-                                        if st.button("저장", key=f"btn_save_d_{m_idx}_{d}"):
-                                            save_sub_match("D", [p_a1, p_a2], [p_b1, p_b2], s_a, s_b, team_a, team_b, match_key)
-                                            st.rerun()
+                                match_results.append(("D", (p_a1, p_a2), s_a, s_b, (p_b1, p_b2)))
 
                         st.write("")
-                        
-                        # ==========================================
-                        # [핵심] 남은 경기 일괄 저장 버튼
-                        # ==========================================
-                        unsaved_count = sum(1 for res in match_results if not st.session_state.get(res[5], False))
-                        
-                        if unsaved_count > 0:
-                            if st.button(f" 전체 일괄 저장 및 스코어보드 반영 (남은 {unsaved_count}건)", type="primary", width="stretch", key=f"btn_save_match_all_{m_idx}"):
-                                for res in match_results:
-                                    m_type, p_a_list, s_a, s_b, p_b_list, match_key = res
-                                    if not st.session_state.get(match_key, False):
-                                        save_sub_match(m_type, p_a_list, p_b_list, s_a, s_b, team_a, team_b, match_key)
-                                st.success("일괄 저장 완료! 스코어보드에 반영되었습니다.")
-                                st.rerun()
-                        else:
-                            st.success("🎉 이 매치의 모든 세부 경기가 저장 완료되었습니다!")
+                        if st.button(" 상세 결과 저장 및 스코어보드 반영", type="primary", width="stretch",
+                                     key=f"btn_save_match_{m_idx}"):
+                            team_a_wins = 0
+                            team_b_wins = 0
+
+                            for res in match_results:
+                                m_type = res[0]
+                                if m_type == "S":
+                                    _, p_a, s_a, s_b, p_b = res
+                                    if p_a != "선택안함" and p_b != "선택안함" and p_a != p_b:
+                                        st.session_state.ind_matrix.loc[p_a, p_b] = s_a
+                                        st.session_state.ind_matrix.loc[p_b, p_a] = s_b
+                                        update_cumulative_record(p_a, p_b, s_a, s_b)
+
+                                    if s_a > s_b:
+                                        team_a_wins += 1
+                                    elif s_b > s_a:
+                                        team_b_wins += 1
+
+                                elif m_type == "D":
+                                    _, (p_a1, p_a2), s_a, s_b, (p_b1, p_b2) = res
+                                    if s_a > s_b:
+                                        team_a_wins += 1
+                                    elif s_b > s_a:
+                                        team_b_wins += 1
+
+                            st.session_state.matrix.loc[team_a, team_b] = team_a_wins
+                            st.session_state.matrix.loc[team_b, team_a] = team_b_wins
+
+                            save_room_state(room_name)
+
+                            st.success(
+                                f"저장 완료! {team_a} ({team_a_wins}) : ({team_b_wins}) {team_b} 결과가 스코어보드에 반영되었습니다.")
+                            st.rerun()
     else:
         st.info("조 편성이 완료되면 경기 배정표가 나타납니다.")
 
@@ -864,11 +877,15 @@ with tab_score:
 
         if 'table_font_size' not in st.session_state:
             num_rows = len(st.session_state.labels)
-            if num_rows <= 4: st.session_state.table_font_size = 20
-            elif num_rows <= 6: st.session_state.table_font_size = 16
-            elif num_rows <= 8: st.session_state.table_font_size = 13
-            else: st.session_state.table_font_size = 11
-            
+            if num_rows <= 4:
+                st.session_state.table_font_size = 20
+            elif num_rows <= 6:
+                st.session_state.table_font_size = 16
+            elif num_rows <= 8:
+                st.session_state.table_font_size = 13
+            else:
+                st.session_state.table_font_size = 11
+
         if 'fullscreen_table' not in st.session_state:
             st.session_state.fullscreen_table = False
 
@@ -945,7 +962,9 @@ with tab_score:
                     st.session_state.table_font_size = max(8, st.session_state.table_font_size - 1)
                     st.rerun()
             with f_col2:
-                st.markdown(f"<div style='text-align:center; padding-top:5px;'><b>크기: {st.session_state.table_font_size}</b></div>", unsafe_allow_html=True)
+                st.markdown(
+                    f"<div style='text-align:center; padding-top:5px;'><b>크기: {st.session_state.table_font_size}</b></div>",
+                    unsafe_allow_html=True)
             with f_col3:
                 if st.button("➕", help="글자 확대"):
                     st.session_state.table_font_size = min(30, st.session_state.table_font_size + 1)
@@ -962,7 +981,7 @@ with tab_score:
                     type="primary",
                     use_container_width=True
                 )
-                
+
         with col_ctrl4:
             if 'h2h_df' in st.session_state and not st.session_state.h2h_df.empty:
                 h2h_bytes = st.session_state.h2h_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
@@ -1001,7 +1020,7 @@ with tab_score:
 
                     with c1:
                         team_a = st.selectbox("기준 조/선수 (A)", labels, key="sb_team_a")
-                    
+
                     with c2:
                         def format_team_b(team_b_name):
                             s_a_val = st.session_state.matrix.loc[team_a, team_b_name]
@@ -1010,7 +1029,8 @@ with tab_score:
                                 return f"{team_b_name} (완료)"
                             return team_b_name
 
-                        team_b = st.selectbox("상대 조/선수 (B)", [l for l in labels if l != team_a], format_func=format_team_b, key="sb_team_b")
+                        team_b = st.selectbox("상대 조/선수 (B)", [l for l in labels if l != team_a],
+                                              format_func=format_team_b, key="sb_team_b")
 
                     if team_a and team_b:
                         s_a_val = st.session_state.matrix.loc[team_a, team_b]
@@ -1021,26 +1041,30 @@ with tab_score:
                             st.warning(f"⚠️ {team_a} vs {team_b} 경기는 이미 결과가 입력되었습니다. 다른 팀을 선택해주세요.")
 
                         with c3:
-                            res_type = st.radio(f"{team_a} 결과", ["승", "패"], horizontal=True, key="sb_res", disabled=is_completed)
+                            res_type = st.radio(f"{team_a} 결과", ["승", "패"], horizontal=True, key="sb_res",
+                                                disabled=is_completed)
 
                         with c4:
-                            win_scores = [f"{s_a}:{limit - s_a}" for s_a in range(limit, -1, -1) if s_a >= (limit - s_a)]
+                            win_scores = [f"{s_a}:{limit - s_a}" for s_a in range(limit, -1, -1) if
+                                          s_a >= (limit - s_a)]
                             lose_scores = [f"{s.split(':')[1]}:{s.split(':')[0]}" for s in win_scores]
                             display_scores = win_scores if res_type == "승" else lose_scores
-                            selected_score = st.radio("스코어 선택", display_scores, horizontal=True, key="sb_score", disabled=is_completed)
+                            selected_score = st.radio("스코어 선택", display_scores, horizontal=True, key="sb_score",
+                                                      disabled=is_completed)
 
                         with c5:
                             st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-                            if st.button(" 저장", type="primary", width="stretch", key="btn_save_team", disabled=is_completed):
+                            if st.button(" 저장", type="primary", width="stretch", key="btn_save_team",
+                                         disabled=is_completed):
                                 s_a, s_b = map(int, selected_score.split(':'))
                                 st.session_state.matrix.loc[team_a, team_b] = s_a
                                 st.session_state.matrix.loc[team_b, team_a] = s_b
-                                
+
                                 p_a_name = team_a.split('(')[0].split('조')[-1].strip() if '조' in team_a else team_a
                                 p_b_name = team_b.split('(')[0].split('조')[-1].strip() if '조' in team_b else team_b
                                 update_cumulative_record(p_a_name, p_b_name, s_a, s_b)
                                 save_room_state(room_name)
-                                
+
                                 st.success(f"저장 완료! {team_a} {s_a} : {s_b} {team_b} 결과가 스코어보드에 반영되었습니다.")
                                 st.rerun()
 
@@ -1056,9 +1080,9 @@ with tab_score:
 
                 with col_status:
                     if not is_admin:
-                        st.error("🚫 **권한 없음:<strong> 성적 입력 및 수정은 관리자만 가능합니다.", icon="⚠️")
+                        st.error("🚫 **권한 없음:** 성적 입력 및 수정은 관리자만 가능합니다.", icon="⚠️")
                     else:
-                        st.success("✅ </strong>관리자 모드:** 입력된 단식 결과가 아래 표에 자동 반영됩니다.", icon="💡")
+                        st.success("✅ **관리자 모드:** 입력된 단식 결과가 아래 표에 자동 반영됩니다.", icon="💡")
 
                         players = list(st.session_state.ind_matrix.index)
                         if len(players) > 0:
@@ -1074,7 +1098,8 @@ with tab_score:
                                         return f"{p_b_name} (완료)"
                                     return p_b_name
 
-                                p_b = st.selectbox("상대 선수 (B)", [p for p in players if p != p_a], format_func=format_player_b, key="ind_p_b")
+                                p_b = st.selectbox("상대 선수 (B)", [p for p in players if p != p_a],
+                                                   format_func=format_player_b, key="ind_p_b")
 
                             if p_a and p_b:
                                 s_a_val = st.session_state.ind_matrix.loc[p_a, p_b]
@@ -1085,18 +1110,21 @@ with tab_score:
                                     st.warning(f"⚠️ {p_a} vs {p_b} 경기는 이미 결과가 입력되었습니다.")
 
                                 with c3:
-                                    res_type_ind = st.radio(f"{p_a} 결과", ["승", "패"], horizontal=True, key="ind_res_radio", disabled=is_completed_ind)
+                                    res_type_ind = st.radio(f"{p_a} 결과", ["승", "패"], horizontal=True,
+                                                            key="ind_res_radio", disabled=is_completed_ind)
 
                                 with c4:
                                     ind_limit = 3
                                     win_scores_ind = [f"{ind_limit}:{i}" for i in range(ind_limit)]
                                     lose_scores_ind = [f"{i}:{ind_limit}" for i in range(ind_limit)]
                                     display_scores_ind = win_scores_ind if res_type_ind == "승" else lose_scores_ind
-                                    selected_score_ind = st.radio("스코어 선택", display_scores_ind, horizontal=True, key="ind_score_radio", disabled=is_completed_ind)
+                                    selected_score_ind = st.radio("스코어 선택", display_scores_ind, horizontal=True,
+                                                                  key="ind_score_radio", disabled=is_completed_ind)
 
                                 with c5:
                                     st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-                                    if st.button(" 저장", type="primary", width="stretch", key="btn_save_ind", disabled=is_completed_ind):
+                                    if st.button(" 저장", type="primary", width="stretch", key="btn_save_ind",
+                                                 disabled=is_completed_ind):
                                         s_a, s_b = map(int, selected_score_ind.split(':'))
                                         st.session_state.ind_matrix.loc[p_a, p_b] = s_a
                                         st.session_state.ind_matrix.loc[p_b, p_a] = s_b
@@ -1109,7 +1137,7 @@ with tab_score:
                 with col_title:
                     st.markdown("#### 개인 성적표 (매트릭스)")
                 with col_info:
-                    st.info(" <strong>아래 표에서 특정 선수의 행(Row)을 클릭</strong>하면 오늘 진행된 상세 세트 전적을 확인할 수 있습니다.")
+                    st.info(" **아래 표에서 특정 선수의 행(Row)을 클릭**하면 오늘 진행된 상세 세트 전적을 확인할 수 있습니다.")
 
                 if is_admin:
                     st.success("마스터 권한 활성화: 표를 더블클릭하여 직접 수정할 수 있습니다.")
@@ -1159,14 +1187,15 @@ with tab_score:
                 st.divider()
                 st.markdown("#### 🔍 역대 누적 상대 전적 검색")
                 st.info("두 선수를 선택하고 버튼을 누르면 지금까지의 누적 맞대결 전적을 팝업 창으로 확인할 수 있습니다.")
-                
+
                 players_list = list(st.session_state.ind_matrix.index)
                 if len(players_list) >= 2:
                     col_s1, col_s2, col_btn = st.columns([3, 3, 2])
                     with col_s1:
                         search_p1 = st.selectbox("선수 1 선택", players_list, key="search_p1")
                     with col_s2:
-                        search_p2 = st.selectbox("선수 2 선택", [p for p in players_list if p != search_p1], key="search_p2")
+                        search_p2 = st.selectbox("선수 2 선택", [p for p in players_list if p != search_p1],
+                                                 key="search_p2")
                     with col_btn:
                         st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
                         if st.button("📊 전적 창 열기", type="primary", use_container_width=True):
@@ -1184,3 +1213,72 @@ with tab_score:
                 st.table(ind_rank.sort_values(['개인승', '세트득실'], ascending=False))
     else:
         st.info("조 편성이 완료되면 스코어보드가 나타납니다.")
+
+'''
+🏓 동호회 운영 시스템 사용 설명서
+환영합니다!
+본 시스템은 동호회(탁구, 배드민턴 등)의 출석 체크, 자동 조 편성, 경기 진행, 스코어 기록 및 누적 전적 
+관리를 한 번에 해결해 주는 스마트 운영 플랫폼입니다.
+
+🔐 1. 시작하기 (접속 및 권한)
+본 시스템은 '관리자(운영진)'와 '일반 회원(조회용)' 모드로 나뉘어 작동합니다.
+
+구장명(방 이름) 입력: 좌측 사이드바에서 사용할 구장명(예: 우리동호회_일요모임)을 입력합니다. 
+같은 구장명을 입력한 기기끼리는 실시간으로 화면이 공유됩니다.
+일반 회원 (조회 전용): 비밀번호를 입력하지 않으면 조회 전용 모드로 접속되며, 점수 조작이나 설정 변경이 불가능합니다.
+관리자 모드 (운영진 전용):
+최초 접속 시: 원하는 비밀번호를 입력하면 해당 구장의 공식 비밀번호로 암호화되어 영구 저장됩니다.
+이후 접속 시: 처음에 설정했던 비밀번호를 입력해야 관리자 권한(점수 입력, 명단 업로드 등)이 활성화됩니다.
+📁 2. 사전 준비 (데이터 업로드)
+※ 관리자만 가능합니다.
+
+좌측 사이드바에서 모임 운영에 필요한 데이터를 업로드합니다.
+
+명단 파일(CSV) 업로드: 회원의 이름, 부수, 참석예정 여부가 적힌 최신 명단을 업로드합니다.
+누적 결과 / 상대전적 업로드 (선택): 이전 모임까지의 누적 데이터가 있다면 업로드하여 역대 전적을 이어갈 수 있습니다.
+시합 일자 및 부수 조정 기준 선택: 오늘 날짜를 확인하고, 대회에 적용할 부수 조정 기준을 선택합니다.
+🚀 3. 단계별 진행 가이드 (상단 탭 순서대로 진행)
+탭 1️⃣ : 출석체크
+오늘 모임에 참석한 인원을 확정하는 단계입니다.
+
+명단에 있는 회원들의 '참석' 체크박스를 클릭하여 출석을 확인합니다. (명단의 '참석예정' 데이터가 자동으로 기본 반영되어 있습니다.)
+체크가 끝나면 [참석자 확정하기] 버튼을 누릅니다.
+💡 Tip: 모임이 끝난 후 [📥 최신 명단(CSV) 다운로드] 버튼을 누르면, 오늘 출석이 반영된 명단을 받을 수 있어 다음 모임 때 편리합니다.
+탭 2️⃣ : 운영 설정
+오늘 진행할 시합의 룰과 조 편성 방식을 결정합니다.
+
+조 구성 & 경기 규칙: 몇 개의 조로 나눌지, 단식/복식은 몇 게임씩 할지, 탁구대(코트)는 몇 개를 사용할지 설정합니다.
+방식 선택:
+AI 선정: 실력(부수)이 균등하게 분배되도록 시스템이 1초 만에 자동으로 조를 짭니다.
+**제비뽑기: 부수별로 그룹을 나눈 뒤, 화면에서 직접 조 번호를 선택하는 '디지털 제비뽑기'를 진행합니다.
+설정이 완료되면 [설정 확정 및 편성 시작] 버튼을 누릅니다.
+탭 3️⃣ : 조 편성 결과
+완성된 조별 명단과 각 조의 총합 부수(실력 지표)를 한눈에 확인할 수 있습니다.
+이 화면을 띄워두고 회원들에게 본인의 조를 확인하도록 안내해 주세요.
+탭 4️⃣ : 경기 배정 (스코어 입력)
+본격적인 시합이 시작되면 사용하는 탭입니다.
+
+경기 배정표: 몇 번 테이블에서 어느 조가 맞붙는지 대진표가 표시됩니다.
+상세 결과 입력: 배정표에서 진행할 경기의 행(Row)을 클릭하면 아래에 점수 입력창이 열립니다.
+출전할 선수(단식/복식)를 선택하고, 세트 스코어를 입력한 뒤 **[상세 결과 저장]**을 누르면 스코어보드에 즉시 반영됩니다.
+탭 5️⃣ : 스코어보드 (종합 상황판)
+현재까지의 대회 진행 상황과 개인별 성적을 확인하는 탭입니다.
+
+📺 전체 화면 모드: 버튼을 누르면 스코어보드가 화면에 꽉 차게 표시됩니다. (구장의 대형 TV나 모니터에 띄워두기 좋습니다.)
+개인 성적표 (매트릭스): 특정 선수의 행을 클릭하면 오늘 누구와 붙어서 몇 대 몇으로 이기고 졌는지 상세 히스토리가 나옵니다.
+📊 역대 누적 상대 전적 검색: 두 명의 선수를 선택하고 버튼을 누르면, 지금까지 두 사람의 역대 맞대결 전적(승률, 득점 등)이 팝업창으로 화려하게 나타납니다.
+💾 4. 모임 종료 후 마무리 (데이터 백업)
+모든 시합이 종료되면 다음 모임을 위해 데이터를 백업해야 합니다. [스코어보드] 탭 상단에 있는 두 개의 다운로드 버튼을 클릭하세요.
+
+[📥 누적 결과 다운로드] : 회원들의 총 경기수, 승/패, 득실점 데이터가 저장됩니다.
+[📥 상대전적 다운로드] : 회원들 간의 1:1 맞대결 기록이 저장됩니다.
+다운로드한 CSV 파일들은 잘 보관해 두었다가, 다음 모임 시작 시 사이드바에 업로드하면 역대 전적이 계속해서 누적됩니다!
+
+❓ 자주 묻는 질문 (FAQ)
+Q. 다른 사람 핸드폰에서도 점수를 볼 수 있나요? A. 네! 사이드바에서 **같은 '구장명'을 입력하고 [🔄 최신 경기결과 불러오기] 버튼을 누르면, 관리자가 입력한 점수와 조 편성 결과가 실시간으로 동기화되어 보입니다.
+
+Q. 점수를 잘못 입력했어요. 수정할 수 있나요? A. 네, 관리자 모드라면 [스코어보드] 탭 하단의 '개인 성적표(매트릭스)' 표를 더블 클릭하여 점수를 직접 수정할 수 있습니다.
+
+Q. 비밀번호를 잊어버렸어요. A. 시스템 관리자(서버 운영자)에게 문의하여 해당 구장의 _pw.txt 파일을 삭제해 달라고 요청하세요. 삭제 후 다시 접속하여 새로운 비밀번호를 설정할 수 있습니다.
+
+'''
