@@ -209,7 +209,7 @@ if 'h2h_df' not in st.session_state: st.session_state.h2h_df = pd.DataFrame(colu
 # 사이드바: 구장 관리 및 권한 설정
 # ==========================================
 st.sidebar.markdown("### 🏟️ 구장 및 권한 설정")
-room_name = st.sidebar.text_input("구장명 (방 이름)", value="기본구장", help="구장 이름을 입력하면 해당 구장의 데이터를 불러옵니다.")
+room_name = st.sidebar.text_input("구장명 (방 이름)", value="생활탁구장", help="구장 이름을 입력하면 해당 구장의 데이터를 불러옵니다.")
 
 if st.sidebar.button("🔄 최신 경기결과 불러오기", type="primary"):
     if load_room_state(room_name):
