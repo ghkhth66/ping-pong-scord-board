@@ -105,7 +105,7 @@ def load_data(uploaded_file=None):
     data = [{"순서": i, "이름": f"회원{i}", "성별": random.choice(["남", "여"]),
              "나이": random.randint(20, 75), "부수": f"{random.randint(1, 13)}부",
              "부수_조정1": 0.0, "부수_조정2": 0.0, "부수_조정3": 0.0,
-             "참석예정": random.choice(["Y", "N"])} for i in range(1, 31)]
+             "참석예정": random.choice(["Y", "N"])} for i in range(1, 11)]
     return pd.DataFrame(data)
 
 # ==========================================
