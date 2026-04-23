@@ -216,7 +216,7 @@ if 'h2h_df' not in st.session_state: st.session_state.h2h_df = pd.DataFrame(
 # 💡 [신규] 구글 스프레드시트 DB 연결 설정
 # ==========================================
 # 본인의 구글 스프레드시트 URL로 반드시 변경하세요!
-SHEET_URL = "https://docs.google.com/spreadsheets/d/본인의_시트_ID/edit"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/ping-account@my-project-671218.iam.gserviceaccount.com/edit"
 
 # DB 연결 시도 (실패 시 빈 데이터프레임 생성하여 에러 방지)
 try:
