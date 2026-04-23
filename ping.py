@@ -1,26 +1,41 @@
 import streamlit as st
-import pandas as pd
 import os
 import numpy as np
 import random
+import pandas as pd
 import re
 from datetime import datetime
 import math
 import io
 import pickle  # 다중 기기/구장 간 상태 공유를 위한 모듈
-import hashlib  # 🔒 비밀번호 암호화를 위한 모듈 추가
+import hashlib  # 🔒 비밀번호 암호화를 위한 모듈
+
+# 💡 구글 스프레드시트 연동을 위한 라이브러리 추가
+try:
+    from streamlit_gsheets import GSheetsConnection
+except ImportError:
+    st.error("⚠️ 'st-gsheets-connection' 라이브러리가 설치되지 않았습니다. 터미널에서 'pip install st-gsheets-connection'을 실행해주세요.")
+
 from Program_User_Guide import show_help_section
+
 # ==========================================
 # 🛠️ 개발자 모드 설정
 # ==========================================
-# True로 설정 시: 비밀번호 없이 관리자 권한 획득, 더미 데이터로 즉시 테스트 가능
-# False로 설정 시: 실제 운영 모드 (비밀번호 필요)
 DEV_MODE = False
+
 # ==========================================
 # [보안] 시스템 운영자 마스터 비밀번호 설정
 # ==========================================
-# 실제 운영 시에는 코드에 직접 적지 않고 st.secrets를 사용하는 것이 좋습니다. (아래 2번 설명 참고)
-MASTER_PASSWORD = st.secrets["master_password"]
+ MASTER_PASSWORD = st.secrets["master_password"] # 실제 운영 시 권장
+
+# ==========================================
+# [보안] 비밀번호 암호화 함수
+# ==========================================
+def hash_password(password):
+    """입력받은 비밀번호를 SHA-256 방식으로 암호화하여 반환"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+HASHED_MASTER_PW = hash_password(MASTER_PASSWORD)
 CURRENT_DATE = datetime.now().strftime('%Y-%m-%d')
 
 st.set_page_config(
@@ -38,20 +53,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ==========================================
-# [보안] 비밀번호 암호화 함수
-# ==========================================
-def hash_password(password):
-    """입력받은 비밀번호를 SHA-256 방식으로 암호화하여 반환"""
-    return hashlib.sha256(password.encode()).hexdigest()
-    
-HASHED_MASTER_PW = hash_password(MASTER_PASSWORD)
 
 # ==========================================
-# [핵심] 구장별 데이터 저장 및 불러오기 (다중 기기 공유)
+# [핵심] 구장별 데이터 저장 및 불러오기 (경기 데이터는 기존처럼 pkl 유지)
+# 💡 방 목록/비밀번호는 DB(구글시트)로 관리하고, 무거운 경기 데이터는 pkl로 관리하는 하이브리드 방식입니다.
 # ==========================================
 def save_room_state(room_name):
-    """현재 세션의 데이터를 구장 이름의 파일로 저장하여 다른 기기에서 볼 수 있게 함"""
     state_to_save = {
         'main_df': st.session_state.get('main_df'),
         'config': st.session_state.get('config'),
@@ -72,8 +79,8 @@ def save_room_state(room_name):
     except Exception as e:
         st.sidebar.error(f"상태 저장 오류: {e}")
 
+
 def load_room_state(room_name):
-    """구장 이름의 파일을 읽어와 현재 화면에 반영 (조회용)"""
     file_name = f"{room_name}_state.pkl"
     if os.path.exists(file_name):
         try:
@@ -87,11 +94,13 @@ def load_room_state(room_name):
             st.sidebar.error(f"데이터 불러오기 실패: {e}")
     return False
 
+
 def reset_config_state():
     st.session_state.config_confirmed = False
     keys_to_delete = ['matrix', 'ind_matrix', 'teams', 'draw_results']
     for k in keys_to_delete:
         if k in st.session_state: del st.session_state[k]
+
 
 def extract_busu(busu_str):
     try:
@@ -100,27 +109,24 @@ def extract_busu(busu_str):
     except:
         return 9.0
 
+
 def load_data(uploaded_file=None):
     if uploaded_file is not None:
         try:
             return pd.read_csv(uploaded_file, encoding='utf-8-sig')
         except:
             return pd.read_csv(uploaded_file, encoding='cp949')
-
-    # 파일이 없을 경우 더미 데이터 생성 (개발/테스트용)
     data = [{"순서": i, "이름": f"회원{i}", "성별": random.choice(["남", "여"]),
              "나이": random.randint(20, 75), "부수": f"{random.randint(1, 13)}부",
              "부수_조정1": 0.0, "부수_조정2": 0.0, "부수_조정3": 0.0,
              "참석예정": random.choice(["Y", "N"])} for i in range(1, 11)]
     return pd.DataFrame(data)
 
-# ==========================================
-# [핵심] 누적 데이터 업데이트 로직 (메모리 기반)
-# ==========================================
+
+# (누적 데이터 업데이트 및 팝업 함수는 기존과 동일하므로 생략 없이 유지)
 def update_cumulative_record(p_a, p_b, s_a, s_b):
     if 'cum_df' not in st.session_state:
         st.session_state.cum_df = pd.DataFrame(columns=['이름', '총경기수', '승', '패', '득점', '실점'])
-
     df_cum = st.session_state.cum_df
 
     def ensure_player(df, name):
@@ -131,7 +137,6 @@ def update_cumulative_record(p_a, p_b, s_a, s_b):
 
     if p_a != "선택안함": df_cum = ensure_player(df_cum, p_a)
     if p_b != "선택안함": df_cum = ensure_player(df_cum, p_b)
-
     for p, win, lose, score, opp_score in [(p_a, s_a > s_b, s_a < s_b, s_a, s_b),
                                            (p_b, s_b > s_a, s_b < s_a, s_b, s_a)]:
         if p != "선택안함":
@@ -141,26 +146,20 @@ def update_cumulative_record(p_a, p_b, s_a, s_b):
             df_cum.at[idx, '패'] += 1 if lose else 0
             df_cum.at[idx, '득점'] += score
             df_cum.at[idx, '실점'] += opp_score
-
     st.session_state.cum_df = df_cum
-
     if p_a != "선택안함" and p_b != "선택안함":
         if 'h2h_df' not in st.session_state:
             st.session_state.h2h_df = pd.DataFrame(
                 columns=['Player1', 'Player2', 'P1_Win', 'P2_Win', 'P1_Score', 'P2_Score'])
-
         h2h = st.session_state.h2h_df
         p1, p2 = sorted([p_a, p_b])
-
         mask = (h2h['Player1'] == p1) & (h2h['Player2'] == p2)
         if not mask.any():
             new_row = pd.DataFrame(
                 [{'Player1': p1, 'Player2': p2, 'P1_Win': 0, 'P2_Win': 0, 'P1_Score': 0, 'P2_Score': 0}])
             h2h = pd.concat([h2h, new_row], ignore_index=True)
             mask = (h2h['Player1'] == p1) & (h2h['Player2'] == p2)
-
         idx = h2h[mask].index[0]
-
         if p1 == p_a:
             h2h.at[idx, 'P1_Win'] += 1 if s_a > s_b else 0
             h2h.at[idx, 'P2_Win'] += 1 if s_b > s_a else 0
@@ -171,32 +170,23 @@ def update_cumulative_record(p_a, p_b, s_a, s_b):
             h2h.at[idx, 'P2_Win'] += 1 if s_a > s_b else 0
             h2h.at[idx, 'P1_Score'] += s_b
             h2h.at[idx, 'P2_Score'] += s_a
-
         st.session_state.h2h_df = h2h
 
-# ==========================================
-# [핵심] 누적 상대 전적 팝업 창 (Dialog)
-# ==========================================
+
 @st.dialog("📊 역대 누적 상대 전적")
 def show_h2h_dialog(player_a, player_b):
     p1, p2 = sorted([player_a, player_b])
     h2h = st.session_state.get('h2h_df', pd.DataFrame())
-
     if not h2h.empty:
         mask = (h2h['Player1'] == p1) & (h2h['Player2'] == p2)
         if mask.any():
             record = h2h[mask].iloc[0]
-            p1_w = record['P1_Win']
-            p2_w = record['P2_Win']
-            p1_s = record['P1_Score']
-            p2_s = record['P2_Score']
-
+            p1_w, p2_w, p1_s, p2_s = record['P1_Win'], record['P2_Win'], record['P1_Score'], record['P2_Score']
             st.markdown(
                 f"<h3 style='text-align: center; color: #28a745;'>{p1} <span style='color:gray;'>vs</span> {p2}</h3>",
                 unsafe_allow_html=True)
             st.markdown(f"<p style='text-align: center; font-size:1.1rem;'>총 <b>{p1_w + p2_w}</b>전 맞대결</p>",
                         unsafe_allow_html=True)
-
             c1, c2 = st.columns(2)
             with c1:
                 st.info(
@@ -206,33 +196,126 @@ def show_h2h_dialog(player_a, player_b):
                 st.error(
                     f"<div style='text-align:center; font-size:1.2rem;'><b>{p2}</b><br><br>🏆 <b>{p2_w}</b> 승<br>🎯 {p2_s} 득점</div>",
                     unsafe_allow_html=True)
-
             st.write("")
-            if st.button("닫기", use_container_width=True):
-                st.rerun()
+            if st.button("닫기", use_container_width=True): st.rerun()
             return
-
     st.warning("아직 두 선수의 누적 맞대결 기록이 없습니다.")
-    if st.button("닫기", use_container_width=True):
-        st.rerun()
+    if st.button("닫기", use_container_width=True): st.rerun()
+
 
 # ----------------- 초기화 -----------------
 if 'main_df' not in st.session_state: st.session_state.main_df = load_data()
 if 'attendance_confirmed' not in st.session_state: st.session_state.attendance_confirmed = False
 if 'config_confirmed' not in st.session_state: st.session_state.config_confirmed = False
-
 if 'cum_df' not in st.session_state: st.session_state.cum_df = pd.DataFrame(
     columns=['이름', '총경기수', '승', '패', '득점', '실점'])
-
 if 'h2h_df' not in st.session_state: st.session_state.h2h_df = pd.DataFrame(
     columns=['Player1', 'Player2', 'P1_Win', 'P2_Win', 'P1_Score', 'P2_Score'])
 
 # ==========================================
-# 사이드바: 구장 관리 및 권한 설정
+# 💡 [신규] 구글 스프레드시트 DB 연결 설정
 # ==========================================
-st.sidebar.markdown("### 🏟️ 구장 및 권한 설정")
-room_name = st.sidebar.text_input("구장명 (방 이름)", value="생활_탁구장", help="구장 이름을 입력하면 해당 구장의 데이터를 불러옵니다.")
+# 본인의 구글 스프레드시트 URL로 반드시 변경하세요!
+SHEET_URL = "https://docs.google.com/spreadsheets/d/본인의_시트_ID/edit"
 
+# DB 연결 시도 (실패 시 빈 데이터프레임 생성하여 에러 방지)
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    # ttl=0: 캐시를 무시하고 항상 최신 DB 데이터를 불러옴
+    db_df = conn.read(spreadsheet=SHEET_URL, worksheet="시트1", ttl=0)
+except Exception as e:
+    st.sidebar.error("⚠️ DB(구글시트) 연결 실패. secrets.toml 설정을 확인하세요.")
+    # 연결 실패 시 임시 빈 데이터프레임 생성 (에러 방지용)
+    db_df = pd.DataFrame(columns=["방이름", "관리자이름", "이메일", "비밀번호", "생성일자"])
+
+# ==========================================
+# 💡 [신규] 사이드바: 탭을 활용한 구장 접속 및 생성 UI
+# ==========================================
+st.sidebar.markdown("### 🏟️ 구장 접속 및 생성")
+
+# 탭 분리: 기존 접속 vs 새 구장 만들기
+tab_login, tab_create = st.sidebar.tabs(["🔑 기존 구장 접속", "➕ 새 구장 만들기"])
+
+is_admin = False
+room_name = "생활_탁구장"  # 기본값 설정
+
+# ------------------------------------------
+# 탭 1: 기존 구장 접속 로직
+# ------------------------------------------
+with tab_login:
+    login_room_name = st.text_input("구장명 (방 이름)", value="생활_탁구장", key="login_room")
+    admin_password = st.text_input("관리자 비밀번호 (조회 시 생략 가능)", type="password", key="login_pw")
+
+    if st.button("로그인 / 접속", use_container_width=True):
+        room_name = login_room_name  # 선택된 방 이름 업데이트
+
+        if admin_password:
+            hashed_pw = hash_password(admin_password)
+
+            # 1. 마스터 비밀번호 확인
+            if hashed_pw == HASHED_MASTER_PW:
+                is_admin = True
+                st.sidebar.success("👑 [시스템 운영자] 마스터 권한으로 접속했습니다.")
+
+            # 2. DB(구글시트)에서 방 이름 및 비밀번호 확인
+            elif login_room_name in db_df['방이름'].values:
+                # 해당 방의 저장된 비밀번호 가져오기
+                saved_pw = db_df.loc[db_df['방이름'] == login_room_name, '비밀번호'].values[0]
+
+                if hashed_pw == saved_pw:
+                    is_admin = True
+                    st.sidebar.success(f"✅ '{login_room_name}' 관리자 모드 활성화")
+                else:
+                    st.sidebar.error("❌ 비밀번호가 틀렸습니다.")
+            else:
+                st.sidebar.warning("⚠️ 존재하지 않는 구장입니다. [새 구장 만들기] 탭을 이용해주세요.")
+        else:
+            st.sidebar.info("👀 현재 조회 전용(Read-only) 모드입니다.")
+
+# ------------------------------------------
+# 탭 2: 새 구장 만들기 로직 (DB 저장 및 중복 검사)
+# ------------------------------------------
+with tab_create:
+    st.markdown("#### ✨ 새로운 구장 등록")
+    new_room_name = st.text_input("새로 만들 구장명 (중복 불가)")
+    admin_name = st.text_input("관리자 이름 (대표자명)")
+    admin_email = st.text_input("관리자 이메일 (비밀번호 분실 시 필요)")
+    new_room_pw = st.text_input("새 구장 비밀번호 설정", type="password", key="create_pw")
+
+    if st.button("새 구장 생성하기", type="primary", use_container_width=True):
+        # 1. 빈칸 검사
+        if not new_room_name or not admin_name or not admin_email or not new_room_pw:
+            st.warning("모든 정보를 빠짐없이 입력해주세요.")
+        else:
+            # 2. DB에서 방 이름 중복 검사
+            if new_room_name in db_df['방이름'].values:
+                st.error(f"⚠️ '{new_room_name}'(은)는 이미 존재하는 구장입니다. 다른 이름을 사용해주세요.")
+            else:
+                # 3. 비밀번호 암호화 및 DB 저장
+                hashed_pw = hash_password(new_room_pw)
+
+                # 새 데이터 행(Row) 생성
+                new_data = pd.DataFrame([{
+                    "방이름": new_room_name,
+                    "관리자이름": admin_name,
+                    "이메일": admin_email,
+                    "비밀번호": hashed_pw,
+                    "생성일자": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }])
+
+                # 기존 DB 데이터프레임에 새 데이터 병합
+                updated_df = pd.concat([db_df, new_data], ignore_index=True)
+
+                try:
+                    # 구글 스프레드시트 업데이트 (실제 저장)
+                    conn.update(spreadsheet=SHEET_URL, worksheet="시트1", data=updated_df)
+                    st.success(f"✅ '{new_room_name}' 구장이 성공적으로 생성되었습니다! [기존 구장 접속] 탭에서 로그인해주세요.")
+                except Exception as e:
+                    st.error(f"DB 저장 중 오류가 발생했습니다: {e}")
+
+st.sidebar.divider()
+
+# 데이터 불러오기 버튼 (현재 선택된 room_name 기준)
 if st.sidebar.button("🔄 최신 경기결과 불러오기", type="primary"):
     if load_room_state(room_name):
         st.sidebar.success(f"'{room_name}' 구장의 데이터를 불러왔습니다.")
@@ -241,56 +324,10 @@ if st.sidebar.button("🔄 최신 경기결과 불러오기", type="primary"):
 
 st.sidebar.divider()
 
-# 🛠️ 권한 처리 및 비밀번호 암호화 로직
-is_admin = False
-
-if DEV_MODE:
-    is_admin = True
-    st.sidebar.warning("🛠️ **[개발자 모드]** 관리자 권한이 자동 부여되었습니다.")
-else:
-    admin_password = st.sidebar.text_input("관리자 비밀번호 (입력 시 관리자 모드)", type="password")
-    pw_file = f"{room_name}_pw.txt"
-
-    if admin_password:
-        hashed_pw = hash_password(admin_password)  # 🔒 입력한 비밀번호를 암호화
-
-        # 1️⃣ 마스터 비밀번호인지 먼저 확인
-        if hashed_pw == HASHED_MASTER_PW:
-            is_admin = True
-            is_system_admin = True
-            st.sidebar.success("👑 [시스템 운영자] 마스터 권한으로 접속했습니다.")
-            
-        # 2️⃣ 마스터가 아니라면 해당 방의 비밀번호인지 확인
-        elif os.path.exists(pw_file):
-            with open(pw_file, "r") as f:
-                saved_pw = f.read().strip()
-
-            if hashed_pw == saved_pw:
-                is_admin = True
-                st.sidebar.success("✅ 방 관리자 모드 활성화")
-            else:
-                st.sidebar.error("❌ 비밀번호가 틀렸습니다.")
-                
-        # 3️⃣ 방 비밀번호 파일이 없는 경우 (최초 설정)
-        else:
-            with open(pw_file, "w") as f:
-                f.write(hashed_pw)
-            is_admin = True
-            st.sidebar.success(f"✅ '{room_name}' 구장 관리자 설정 완료")
-
-    else:
-        st.sidebar.info("👀 현재 조회 전용(Read-only) 모드입니다.")
-
-# 🚨 비밀번호 초기화 버튼 (관리자일 때만 보이게)
+# 🚨 비밀번호 초기화 버튼 (마스터 관리자 전용 기능으로 변경 권장)
 if is_admin:
-    # 시스템 운영자이거나, 방 관리자 본인일 때 초기화 가능
-    if st.sidebar.button("🚨 이 방의 비밀번호 초기화 (Reset)"):
-        if os.path.exists(pw_file):
-            os.remove(pw_file)
-            st.sidebar.success(f"'{room_name}' 구장의 비밀번호가 초기화되었습니다. 페이지를 새로고침하세요.")
-            st.rerun()
-        else:
-            st.sidebar.warning("아직 비밀번호가 설정되지 않은 방입니다.")
+    if st.sidebar.button("🚨 이 방의 비밀번호 초기화 (DB 삭제)"):
+        st.sidebar.warning("DB 연동 모드에서는 구글 스프레드시트에서 직접 해당 행을 삭제하거나 수정해야 합니다.")
 
 st.sidebar.divider()
 
@@ -335,8 +372,11 @@ if col_date not in st.session_state.main_df.columns:
 
 selected_adj = st.sidebar.selectbox("부수 조정 기준", ["부수_조정1", "부수_조정2", "부수_조정3"], disabled=not is_admin)
 
-tab_home, tab_config, tab_team, tab_match, tab_score, tab_help = st.tabs([" 출석체크", " 운영 설정", " 조 편성 결과", " 경기 배정", " 스코어보드", "사용설명서"])
+tab_home, tab_config, tab_team, tab_match, tab_score, tab_help = st.tabs(
+    [" 출석체크", " 운영 설정", " 조 편성 결과", " 경기 배정", " 스코어보드", "사용설명서"])
 
+
+# (이하 탭 내부 UI 코드는 기존과 동일하게 작성하시면 됩니다.)
 # ==========================================
 # 탭 1: 출석체크
 # ==========================================
@@ -389,6 +429,7 @@ def attendance_check_fragment():
 with tab_home:
     attendance_check_fragment()
 
+
 # ==========================================
 # 탭 2: 운영 설정
 # ==========================================
@@ -438,6 +479,7 @@ def config_setup_fragment():
         else:
             st.info("관리자 전용")
     st.markdown('</div>', unsafe_allow_html=True)
+
 
 @st.fragment
 def draw_process_fragment():
@@ -563,6 +605,7 @@ def draw_process_fragment():
                         if key.startswith("group_selections_") or key.startswith("select_"):
                             del st.session_state[key]
                     st.rerun()
+
 
 with tab_config:
     config_setup_fragment()
@@ -916,6 +959,7 @@ with tab_score:
         if 'fullscreen_table' not in st.session_state:
             st.session_state.fullscreen_table = False
 
+
         def draw_summary_table():
             m = st.session_state.matrix
             rank = pd.DataFrame(index=st.session_state.labels)
@@ -969,6 +1013,7 @@ with tab_score:
             """
             full_width_html = css + '<div class="custom-table-wrapper">' + raw_html + '</div>'
             st.markdown(full_width_html, unsafe_allow_html=True)
+
 
         col_ctrl1, col_ctrl2, col_ctrl3, col_ctrl4 = st.columns([4, 2, 2, 2])
 
@@ -1056,6 +1101,7 @@ with tab_score:
                                 return f"{team_b_name} (완료)"
                             return team_b_name
 
+
                         team_b = st.selectbox("상대 조/선수 (B)", [l for l in labels if l != team_a],
                                               format_func=format_team_b, key="sb_team_b")
 
@@ -1124,6 +1170,7 @@ with tab_score:
                                     if not np.isnan(s_a_val) and (s_a_val + s_b_val > 0):
                                         return f"{p_b_name} (완료)"
                                     return p_b_name
+
 
                                 p_b = st.selectbox("상대 선수 (B)", [p for p in players if p != p_a],
                                                    format_func=format_player_b, key="ind_p_b")
