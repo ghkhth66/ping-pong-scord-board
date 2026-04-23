@@ -46,6 +46,7 @@ st.markdown("""
 def hash_password(password):
     """입력받은 비밀번호를 SHA-256 방식으로 암호화하여 반환"""
     return hashlib.sha256(password.encode()).hexdigest()
+    
 HASHED_MASTER_PW = hash_password(MASTER_PASSWORD)
 # ==========================================
 # [핵심] 구장별 데이터 저장 및 불러오기 (다중 기기 공유)
