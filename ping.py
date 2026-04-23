@@ -21,6 +21,7 @@ DEV_MODE = False
 # ==========================================
 # 실제 운영 시에는 코드에 직접 적지 않고 st.secrets를 사용하는 것이 좋습니다. (아래 2번 설명 참고)
 MASTER_PASSWORD = "superadmin123!" 
+# MASTER_PASSWORD = st.secrets["master_password"]
 HASHED_MASTER_PW = hash_password(MASTER_PASSWORD)
 
 CURRENT_DATE = datetime.now().strftime('%Y-%m-%d')
