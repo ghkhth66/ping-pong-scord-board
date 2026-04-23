@@ -16,6 +16,12 @@ from Program_User_Guide import show_help_section
 # True로 설정 시: 비밀번호 없이 관리자 권한 획득, 더미 데이터로 즉시 테스트 가능
 # False로 설정 시: 실제 운영 모드 (비밀번호 필요)
 DEV_MODE = False
+# ==========================================
+# [보안] 시스템 운영자 마스터 비밀번호 설정
+# ==========================================
+# 실제 운영 시에는 코드에 직접 적지 않고 st.secrets를 사용하는 것이 좋습니다. (아래 2번 설명 참고)
+MASTER_PASSWORD = "superadmin123!" 
+HASHED_MASTER_PW = hash_password(MASTER_PASSWORD)
 
 CURRENT_DATE = datetime.now().strftime('%Y-%m-%d')
 
@@ -248,19 +254,25 @@ else:
     if admin_password:
         hashed_pw = hash_password(admin_password)  # 🔒 입력한 비밀번호를 암호화
 
-        if os.path.exists(pw_file):
-            print(os.path)
+        # 1️⃣ 마스터 비밀번호인지 먼저 확인
+        if hashed_pw == HASHED_MASTER_PW:
+            is_admin = True
+            is_system_admin = True
+            st.sidebar.success("👑 [시스템 운영자] 마스터 권한으로 접속했습니다.")
+            
+        # 2️⃣ 마스터가 아니라면 해당 방의 비밀번호인지 확인
+        elif os.path.exists(pw_file):
             with open(pw_file, "r") as f:
                 saved_pw = f.read().strip()
 
-            # 🔒 암호화된 값끼리 비교
             if hashed_pw == saved_pw:
                 is_admin = True
-                st.sidebar.success("✅ 관리자 모드 활성화")
+                st.sidebar.success("✅ 방 관리자 모드 활성화")
             else:
                 st.sidebar.error("❌ 비밀번호가 틀렸습니다.")
+                
+        # 3️⃣ 방 비밀번호 파일이 없는 경우 (최초 설정)
         else:
-            # 🔒 최초 설정 시 암호화된 값을 파일에 저장
             with open(pw_file, "w") as f:
                 f.write(hashed_pw)
             is_admin = True
@@ -271,11 +283,14 @@ else:
 
 # 🚨 비밀번호 초기화 버튼 (관리자일 때만 보이게)
 if is_admin:
-    if st.sidebar.button("🚨 비밀번호 초기화 (Reset)"):
+    # 시스템 운영자이거나, 방 관리자 본인일 때 초기화 가능
+    if st.sidebar.button("🚨 이 방의 비밀번호 초기화 (Reset)"):
         if os.path.exists(pw_file):
             os.remove(pw_file)
-            st.sidebar.success("초기화 완료. 페이지를 새로고침하세요.")
+            st.sidebar.success(f"'{room_name}' 구장의 비밀번호가 초기화되었습니다. 페이지를 새로고침하세요.")
             st.rerun()
+        else:
+            st.sidebar.warning("아직 비밀번호가 설정되지 않은 방입니다.")
 
 st.sidebar.divider()
 
