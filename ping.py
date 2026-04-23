@@ -21,7 +21,7 @@ DEV_MODE = False
 # ==========================================
 # 실제 운영 시에는 코드에 직접 적지 않고 st.secrets를 사용하는 것이 좋습니다. (아래 2번 설명 참고)
 MASTER_PASSWORD = st.secrets["master_password"]
-HASHED_MASTER_PW = hash_password(MASTER_PASSWORD)
+
 
 CURRENT_DATE = datetime.now().strftime('%Y-%m-%d')
 
@@ -46,7 +46,7 @@ st.markdown("""
 def hash_password(password):
     """입력받은 비밀번호를 SHA-256 방식으로 암호화하여 반환"""
     return hashlib.sha256(password.encode()).hexdigest()
-
+HASHED_MASTER_PW = hash_password(MASTER_PASSWORD)
 # ==========================================
 # [핵심] 구장별 데이터 저장 및 불러오기 (다중 기기 공유)
 # ==========================================
