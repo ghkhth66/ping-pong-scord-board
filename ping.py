@@ -24,7 +24,9 @@ from Program_User_Guide import show_help_section
 # ==========================================
 DEV_MODE = False
 # 관리자 마스터 비밀번호 설정 (secrets.toml 파일에서 가져오거나 기본값 '1234' 사용)
-MASTER_PASSWORD = st.secrets.get("master_password", "1234")
+# MASTER_PASSWORD = st.secrets.get("master_password", "1234")
+# 관리자 마스터 비밀번호 설정 (secrets 설정에서만 가져옴)
+MASTER_PASSWORD = st.secrets["master_password"]
 CURRENT_DATE = datetime.now().strftime('%Y-%m-%d')  # 오늘 날짜
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1x26ijdrwI9BKPXYM7IJAkTUVYZBgSqST6X9sVgwvhcE/edit"  # 구글 시트 주소
 
