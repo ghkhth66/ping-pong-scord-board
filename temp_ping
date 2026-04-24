@@ -389,8 +389,14 @@ selected_adj = st.sidebar.selectbox("부수 조정 기준", ["부수_조정1", "
 # ==========================================
 # 6. 메인 화면 UI (Tabs)
 # ==========================================
-tab_home, tab_config, tab_team, tab_match, tab_score, tab_help = st.tabs(
-    [" 출석체크", " 운영 설정", " 조 편성 결과", " 경기 배정", " 스코어보드", "사용설명서"])
+# tab_home, tab_config, tab_team, tab_match, tab_score, tab_help = st.tabs(
+#     [" 출석체크", " 운영 설정", " 조 편성 결과", " 경기 배정", " 스코어보드", "사용설명서"])
+
+# ==========================================
+# 6. 메인 화면 UI (Tabs)
+# ==========================================
+tab_home, tab_config, tab_team, tab_match, tab_score, tab_history, tab_help = st.tabs(
+    [" 출석체크", " 운영 설정", " 조 편성 결과", " 경기 배정", " 스코어보드", "📊 역대 기록", "사용설명서"])
 
 attendees_count = (
         st.session_state.main_df[col_date] == 'Y').sum() if col_date in st.session_state.main_df.columns else 0
@@ -1087,9 +1093,13 @@ with tab_score:
                         save_room_state(room_name)
                         st.rerun()
                 else:
-                    event_matrix = st.data_editor(st.session_state.ind_matrix, width="stretch", height=400,
-                                                  key="ind_matrix_select", on_select="rerun",
-                                                  selection_mode="single-row")
+                    # ✅ 일반 유저는 수정할 필요가 없으므로 st.dataframe 사용 (disabled 옵션도 뺌)
+                    event_matrix = st.dataframe(st.session_state.ind_matrix, width="stretch", height=400,
+                                                key="ind_matrix_select", on_select="rerun",
+                                                selection_mode="single-row")
+                    # event_matrix = st.data_editor(st.session_state.ind_matrix, width="stretch", height=400,
+                    #                               disabled=True, key="ind_matrix_select", on_select="rerun",
+                    #                               selection_mode="single-row")
                     if event_matrix and event_matrix.selection.rows:
                         selected_idx = event_matrix.selection.rows[0]
                         selected_player = st.session_state.ind_matrix.index[selected_idx]
@@ -1133,8 +1143,54 @@ with tab_score:
         st.info("조 편성이 완료되면 스코어보드가 나타납니다.")
 
 # ------------------------------------------
+# 탭 6: 역대 기록 조회 (구글 시트 연동)
+# ------------------------------------------
+with tab_history:
+    st.markdown(f"### 📊 '{room_name}' 구장 역대 기록 조회")
+    st.info("💡 구글 드라이브(시트)에 안전하게 저장된 과거의 경기 결과들을 불러옵니다. (일반 회원도 조회 가능)")
+
+    # 버튼을 누를 때만 구글 시트에서 데이터를 가져오도록 하여 API 호출 횟수 절약
+    if st.button("🔄 구글 시트에서 최신 기록 불러오기", type="primary", use_container_width=True):
+        with st.spinner("구글 시트에서 데이터를 불러오는 중입니다... 잠시만 기다려주세요."):
+            try:
+                conn = st.connection("gsheets", type=GSheetsConnection)
+
+                col1, col2 = st.columns(2)
+
+                # 1. 조별 결과 불러오기
+                with col1:
+                    st.markdown("#### 👥 역대 조별 경기 결과")
+                    try:
+                        # ttl=0을 주어 버튼을 누를 때마다 항상 최신 데이터를 가져오게 함
+                        df_team_history = conn.read(spreadsheet=SHEET_URL, worksheet=f"{room_name}_조별결과", ttl=0)
+                        if not df_team_history.empty:
+                            st.dataframe(df_team_history, width="stretch", hide_index=True)
+                        else:
+                            st.warning("저장된 조별 경기 결과가 없습니다.")
+                    except Exception:
+                        st.warning("저장된 조별 경기 결과가 없습니다.")
+
+                # 2. 개인전 결과 불러오기
+                with col2:
+                    st.markdown("#### 👤 역대 개인전 경기 결과")
+                    try:
+                        df_ind_history = conn.read(spreadsheet=SHEET_URL, worksheet=f"{room_name}_개인결과", ttl=0)
+                        if not df_ind_history.empty:
+                            st.dataframe(df_ind_history, width="stretch", hide_index=True)
+                        else:
+                            st.warning("저장된 개인전 경기 결과가 없습니다.")
+                    except Exception:
+                        st.warning("저장된 개인전 경기 결과가 없습니다.")
+
+                st.success("✅ 구글 시트에서 성공적으로 데이터를 불러왔습니다!")
+
+            except Exception as e:
+                st.error(f"데이터를 불러오는데 실패했습니다. 관리자에게 문의하세요. (에러: {e})")
+
+# ------------------------------------------
 # 탭 6: 사용 설명서
 # ------------------------------------------
 with tab_help:
     lang = st.radio("언어 선택 / Select Language", ["한국어", "English"], horizontal=True)
     show_help_section(lang)
+
