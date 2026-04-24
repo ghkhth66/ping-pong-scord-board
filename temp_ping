@@ -1088,7 +1088,7 @@ with tab_score:
                         st.rerun()
                 else:
                     event_matrix = st.data_editor(st.session_state.ind_matrix, width="stretch", height=400,
-                                                  disabled=True, key="ind_matrix_select", on_select="rerun",
+                                                  key="ind_matrix_select", on_select="rerun",
                                                   selection_mode="single-row")
                     if event_matrix and event_matrix.selection.rows:
                         selected_idx = event_matrix.selection.rows[0]
