@@ -22,11 +22,11 @@ except ImportError:
 
 from Program_User_Guide import show_help_section
 
-auro_refresh_count = st_autorefresh(interval=10 * 60 * 1000, limit=100, key="data_refresh")
+# auro_refresh_count = st_autorefresh(interval=10 * 60 * 1000, limit=100, key="data_refresh")
 
-st.markdown("<h1 style='font-size: 20px;'>실시간 데이터 모니터링</h1>", unsafe_allow_html=True)
-st.write(f"현재 화면 새로고침 횟수: {auro_refresh_count}회")
-st.write(f"마지막 업데이트 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+# st.markdown("<h1 style='font-size: 20px;'>실시간 데이터 모니터링</h1>", unsafe_allow_html=True)
+# st.write(f"현재 화면 새로고침 횟수: {auro_refresh_count}회")
+# st.write(f"마지막 업데이트 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ==========================================
 # 1. 환경 설정 및 전처리 (Config & CSS)
@@ -85,6 +85,19 @@ st.markdown("""
         display: flex;             /* 컬럼 내부 요소를 Flexbox 레이아웃으로 설정 */
         flex-direction: column;    /* 내부 요소들이 위에서 아래로(세로로) 배치되도록 설정 */
         justify-content: center;   /* 내부 요소들을 컬럼의 세로 기준 '중앙'에 배치 (수직 중앙 정렬) */
+    }
+    /* ========================================== */
+    /* 7. 화면 맨 위쪽 여백 줄이기 (새로 추가된 부분) */
+    /* ========================================== */
+    
+    /* 메인 화면(오른쪽)의 위쪽 여백 조절 */
+    .block-container {
+        padding-top: 2.5rem; /* 숫자를 줄일수록 위로 올라갑니다 (기본값 약 6rem) */
+    }
+    
+    /* 사이드바(왼쪽)의 맨 위쪽 여백 조절 */
+    [data-testid="stSidebar"] .block-container {
+        padding-top: 2rem;
     }
 </style>
 """, unsafe_allow_html=True) # HTML과 CSS 태그가 문자열 그대로 출력되지 않고 실제 웹페이지에 적용되도록 허용하는 옵션
@@ -413,7 +426,6 @@ room_name = st.session_state.room_name
 # ==========================================
 if not is_admin:
     st.sidebar.markdown("### 🏟️ 구장 접속 및 생성")
-
     # 사이드바 안에 '기존 구장 접속'과 '새 구장 만들기'라는 2개의 탭(Tab)을 만듭니다.
     tab_login, tab_create = st.sidebar.tabs(["🔑 기존 구장 접속", "➕ 새 구장 만들기"])
 
@@ -517,39 +529,56 @@ else:
         st.session_state.is_admin = False  # 관리자 권한 박탈
         st.rerun()  # 새로고침하여 다시 [로그인 전] 화면으로 돌아감
 
-# 사이드바에 가로줄(구분선) 긋기
-st.sidebar.divider()
+    # 체크박스를 만들어 사용자가 켜고 끌 수 있게 합니다. (기본값은 False로 꺼둠)
+    auto_refresh = st.sidebar.checkbox("자동 새로고침 켜기 (PC 전광판용)")
 
-if is_admin:
-    st.sidebar.markdown("### 📁 데이터 파일 업로드")
+    if auto_refresh:
+        # 5분(5 * 60 * 1000 = 300,000 밀리초)마다 새로고침
+        # limit=None으로 설정하면 무한으로 새로고침 됩니다.
+        st_autorefresh(interval=5 * 60 * 1000, limit=None, key="dashboard_refresh")
+        st.sidebar.info("🟢 현재 5분마다 화면이 자동 갱신 중입니다. \n\n⚠️ 데이터 입력/수정 중에는 이 기능을 꺼주세요!")
 
-    # 1. 명단 파일 업로드
-    # st.file_uploader를 사용해 사용자 컴퓨터에서 파일을 선택할 수 있는 버튼 생성
-    uploaded_file = st.sidebar.file_uploader("1. 명단 파일(CSV) 업로드")
-    # 파일이 정상적으로 올라왔고, 확장자가 .csv로 끝나는지 확인
-    if uploaded_file and uploaded_file.name.lower().endswith('.csv'):
-        if st.sidebar.button("명단 적용하기"):
-            st.session_state.main_df = load_data(uploaded_file)  # 파일을 읽어 세션에 저장
-            st.sidebar.success("새로운 명부가 적용되었습니다.")
-            st.rerun()  # 새로고침하여 화면에 반영
+    # 2. 간격을 비정상적으로 확 좁히고 싶을 때 (마이너스 값 사용)
+    # Streamlit의 기본 여백을 무시하고 위로 바짝 붙입니다.
+    # 💡 수정: 사이드바의 간격을 좁히기 위해 st.sidebar.markdown 사용
+    # st.sidebar.markdown("<div style='margin-top: -170px;'></div>", unsafe_allow_html=True)
+    # st.sidebar.divider()
+    # st.sidebar.markdown("<div style='margin-top: -170px;'></div>", unsafe_allow_html=True)
+    # st.sidebar.divider() 와 마이너스 여백 코드들을 전부 지우고, 아래 한 줄만 넣습니다.
+    # margin: 10px 0px; 에서 10px 숫자를 줄이면(예: 5px) 위아래 간격이 더 좁아집니다.
+    st.sidebar.markdown("<hr style='margin: 10px 0px;'>", unsafe_allow_html=True)
 
-    # 2. 누적 결과 업로드
-    cum_file = st.sidebar.file_uploader("2. 기존 누적 결과(CSV) 업로드")
-    if cum_file and cum_file.name.lower().endswith('.csv'):
-        if st.sidebar.button("누적 데이터 적용"):
-            # 한글 깨짐 방지를 위해 encoding='utf-8-sig' 옵션을 주어 CSV 파일을 읽음
-            st.session_state.cum_df = pd.read_csv(cum_file, encoding='utf-8-sig')
-            st.sidebar.success("누적 데이터가 연동되었습니다.")
-            st.rerun()
+    # 💡 개선 1 & 3: 중복된 if is_admin 제거 및 Expander(접기/펴기) 사용
+    with st.sidebar.expander("📁 데이터 파일 업로드 (클릭하여 열기)", expanded=False):
 
-    # 3. 상대 전적 업로드
-    h2h_file = st.sidebar.file_uploader("3. 누적 상대전적(CSV) 업로드")
-    if h2h_file and h2h_file.name.lower().endswith('.csv'):
-        if st.sidebar.button("상대전적 데이터 적용"):
-            st.session_state.h2h_df = pd.read_csv(h2h_file, encoding='utf-8-sig')
-            st.sidebar.success("상대전적 데이터가 연동되었습니다.")
-            st.rerun()
+        # 💡 개선 2: type=['csv'] 옵션을 주어 CSV 파일만 선택 가능하도록 강제
+        uploaded_file = st.file_uploader("1. 명단 파일(CSV) 업로드", type=['csv'])
+        if uploaded_file:
+            if st.button("명단 적용하기", use_container_width=True):
+                st.session_state.main_df = load_data(uploaded_file)
+                st.success("새로운 명부가 적용되었습니다.")
+                time.sleep(1)
+                st.rerun()
 
+        cum_file = st.file_uploader("2. 기존 누적 결과(CSV) 업로드", type=['csv'])
+        if cum_file:
+            if st.button("누적 데이터 적용", use_container_width=True):
+                st.session_state.cum_df = pd.read_csv(cum_file, encoding='utf-8-sig')
+                st.success("누적 데이터가 연동되었습니다.")
+                time.sleep(1)
+                st.rerun()
+
+        h2h_file = st.file_uploader("3. 누적 상대전적(CSV) 업로드", type=['csv'])
+        if h2h_file:
+            if st.button("상대전적 데이터 적용", use_container_width=True):
+                st.session_state.h2h_df = pd.read_csv(h2h_file, encoding='utf-8-sig')
+                st.success("상대전적 데이터가 연동되었습니다.")
+                time.sleep(1)
+                st.rerun()
+
+# ---------------------------------------------------------
+# 3. 메인 화면 데이터 처리 (날짜 및 출석/조편성)
+# ---------------------------------------------------------
 selected_date = st.date_input("시합 일자 선택", datetime.now(), disabled=not is_admin)
 
 # 선택된 날짜를 '2023-10-25' 같은 문자열 형태로 변환합니다.
@@ -575,14 +604,12 @@ if col_date not in st.session_state.main_df.columns:
 
 # 👇 [수정 부분 1] 여기에 "조편성_신청" 컬럼 확인 및 자동 생성 코드를 추가합니다. 👇
 if '조편성_신청' not in st.session_state.main_df.columns:
-    def assign_random_group(row):
-        # 참석하는 사람에게만 임의로 1\~4조(또는 A\~D팀 등)를 임시 배정
-        if row[col_date] == 'Y':
-            return str(random.randint(1, 4))
-        return ""
+    # 💡 개선 5: 함수 정의 대신 lambda를 사용하여 코드를 간결하게 만들고 속도 향상
+    st.session_state.main_df['조편성_신청'] = st.session_state.main_df[col_date].apply(
+        lambda x: str(random.randint(1, 4)) if x == 'Y' else ""
+    )
 
-    st.session_state.main_df['조편성_신청'] = st.session_state.main_df.apply(assign_random_group, axis=1)
-    # 생성 후 파일로 저장하여 사용자가 다운로드 후 수정할 수 있게 함
+    # # 생성 후 파일로 저장하여 사용자가 다운로드 후 수정할 수 있게 함
     if is_admin:
         save_room_state(room_name)
 # 👆 ------------------------------------------------------------------------ 👆
