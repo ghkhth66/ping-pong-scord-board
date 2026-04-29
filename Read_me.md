@@ -1,4 +1,4 @@
-# 🏓 동호회 리그 운영 시스템 (Club League Management System)
+# 🏓 리그 운영 시스템 (Club League Management System)
 
 ![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
