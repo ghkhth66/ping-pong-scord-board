@@ -250,6 +250,7 @@ def update_cumulative_record(p_a, p_b, s_a, s_b):
 #     elif sheet_type == "상대전적":
 #         return pd.DataFrame({"방이름": [], "Player1": [], "Player2": [], "P1_Win": [], "P2_Win": [], "P1_Score": [], "P2_Score": []})
 #     return pd.DataFrame()
+
 def get_sheet_template(sheet_type):
     """선택한 시트 종류에 맞는 빈 컬럼 구조를 반환합니다."""
     if sheet_type == "선수명단":
@@ -283,8 +284,10 @@ def align_columns_to_template(uploaded_df, template_df):
     for col in expected_columns:
         if col not in uploaded_df.columns:
             uploaded_df[col] = None
-    return uploaded_df[expected_columns]
-
+    # return uploaded_df[expected_columns]
+    # ✅ 날짜처럼 추가된 컬럼도 유지하도록 수정
+    return uploaded_df
+    
 def extract_busu(busu_str):
     """'3부', '4부' 같은 문자열에서 숫자(3, 4)만 추출하여 계산에 사용할 수 있게 변환"""
     try:
