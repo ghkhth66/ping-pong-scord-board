@@ -234,6 +234,57 @@ def update_cumulative_record(p_a, p_b, s_a, s_b):
         st.session_state.h2h_df = h2h
 
 
+# ==========================================
+# 1. 시트 종류별 기준 템플릿(샘플) 정의 함수
+# ==========================================
+# ==========================================
+# 🌟 [새로 추가된 부분 1] 데이터 템플릿 및 보정 함수
+# ==========================================
+# def get_sheet_template(sheet_type):
+#     """선택한 시트 종류에 맞는 빈 컬럼 구조를 반환합니다."""
+#     if sheet_type == "선수명단":
+#         return pd.DataFrame({"선수ID": [], "이름": [], "부서": [], "탁구등급": [], "가입일자": []})
+#     elif sheet_type == "누적전적":
+#         return pd.DataFrame({"경기일자": [], "선수1": [], "선수2": [], "세트스코어": [], "승자": [], "비고": []})
+#     # 🌟 [상대전적 추가된 부분 1] 상대전적 템플릿 추가 (기존 코드의 컬럼명 반영)
+#     elif sheet_type == "상대전적":
+#         return pd.DataFrame({"방이름": [], "Player1": [], "Player2": [], "P1_Win": [], "P2_Win": [], "P1_Score": [], "P2_Score": []})
+#     return pd.DataFrame()
+def get_sheet_template(sheet_type):
+    """선택한 시트 종류에 맞는 빈 컬럼 구조를 반환합니다."""
+    if sheet_type == "선수명단":
+        # 🌟 [수정된 부분] 말씀하신 필수 컬럼들을 모두 추가했습니다.
+        # (기존에 있던 부서, 탁구등급 등과 함께 필요에 맞게 순서를 조정하셔도 됩니다)
+        return pd.DataFrame({
+            # "선수ID": [],
+            "이름": [],
+            "부수": [],  # 👈 추가됨
+            "참석예정": [],  # 👈 추가됨
+            "참석": [],  # 👈 추가됨
+            "조편성_신청": []  # 👈 추가됨
+        })
+
+    elif sheet_type == "누적전적":
+        return pd.DataFrame({
+            "경기일자": [], "선수1": [], "선수2": [], "세트스코어": [], "승자": [], "비고": []
+        })
+
+    elif sheet_type == "상대전적":
+        return pd.DataFrame({
+            "방이름": [], "Player1": [], "Player2": [], "P1_Win": [], "P2_Win": [], "P1_Score": [], "P2_Score": []
+        })
+
+    return pd.DataFrame()
+# ==========================================
+# 2. 업로드된 데이터의 컬럼을 템플릿에 맞게 보정하는 함수
+# ==========================================
+def align_columns_to_template(uploaded_df, template_df):
+    expected_columns = template_df.columns.tolist()
+    for col in expected_columns:
+        if col not in uploaded_df.columns:
+            uploaded_df[col] = None
+    return uploaded_df[expected_columns]
+
 def extract_busu(busu_str):
     """'3부', '4부' 같은 문자열에서 숫자(3, 4)만 추출하여 계산에 사용할 수 있게 변환"""
     try:
@@ -351,12 +402,9 @@ room_name = st.session_state.room_name
 # ==========================================
 if not is_admin:
     st.sidebar.markdown("### 🏟️ 구장 접속 및 생성")
-    # 사이드바 안에 '기존 구장 접속'과 '새 구장 만들기'라는 2개의 탭(Tab)을 만듭니다.
     tab_login, tab_create = st.sidebar.tabs(["🔑 기존 구장 접속", "➕ 새 구장 만들기"])
 
     with tab_login:
-        # 💡 [적용 포인트 3: st.form]
-        # 구장명 선택과 비밀번호 입력을 폼으로 묶어, '로그인' 버튼을 누르기 전까지는 화면이 재실행되지 않게 합니다.
         with st.form(key="login_form"):
             last_room = cookies.get("last_room", "")
             default_index = room_list.index(last_room) if last_room in room_list else 0
@@ -407,13 +455,10 @@ if not is_admin:
                     time.sleep(1)
                     st.rerun()
             else:
-                # 비밀번호를 입력하지 않고 버튼을 누르면 일반 사용자(조회 전용) 모드로 접속
                 st.sidebar.info("👀 현재 조회 전용(Read-only) 모드입니다.")
 
     with tab_create:
         st.markdown("#### ✨ 새로운 구장 등록")
-        # 💡 [적용 포인트 3: st.form]
-        # 텍스트를 입력할 때마다 화면이 깜빡이는 것을 방지하기 위해 폼으로 묶습니다.
         with st.form(key="create_room_form"):
             new_room_name = st.text_input("새로 만들 구장명 (중복 불가)")
             admin_name = st.text_input("관리자 이름 (대표자명)")
@@ -425,12 +470,9 @@ if not is_admin:
         if submit_create:
             if not new_room_name or not admin_name or not admin_email or not new_room_pw:
                 st.warning("모든 정보를 빠짐없이 입력해주세요.")
-
-            # 이미 존재하는 방 이름인지 검사
             elif new_room_name in db_df['방이름'].values:
                 st.error(f"⚠️ '{new_room_name}'(은)는 이미 존재하는 구장입니다.")
             else:
-                # 모든 검사를 통과하면 비밀번호를 암호화하고 새 데이터를 표(DataFrame) 형태로 만듦
                 hashed_pw = hash_password(new_room_pw)
                 new_data = pd.DataFrame(
                     [{"방이름": new_room_name, "관리자이름": admin_name, "이메일": admin_email, "비밀번호": hashed_pw,
@@ -438,10 +480,7 @@ if not is_admin:
                 updated_df = pd.concat([db_df, new_data], ignore_index=True)
 
                 try:
-                    # 구글 시트에 업데이트된 표를 덮어쓰기하여 저장
                     conn.update(spreadsheet=SHEET_URL, worksheet="시트1", data=updated_df)
-
-                    # 💡 방이 새로 생성되었으므로 캐시를 지워 다음 접속 시 방 목록이 갱신되도록 합니다.
                     load_room_list.clear()
 
                     st.session_state.room_name = new_room_name
@@ -466,12 +505,13 @@ else:
     st.sidebar.markdown(f"### 🏟️ {room_name} 구장")
     st.sidebar.success("👑 관리자 모드로 접속 중입니다.")
 
-    # 로그아웃 버튼
     if st.sidebar.button("🔒 로그아웃", use_container_width=True):
         st.session_state.is_admin = False
         st.rerun()
 
     st.sidebar.divider()
+
+    # 🛠️ [수정된 부분 1] 기존 코드에 '클라우드 동기화' 부분이 똑같이 2번 중복되어 있어서 하나를 삭제했습니다.
     st.sidebar.markdown("#### ☁️ 클라우드 동기화")
     if st.sidebar.button("💾 오늘의 최종 결과 구글시트 저장", type="primary", use_container_width=True):
         with st.spinner("구글 시트에 데이터를 안전하게 저장 중입니다..."):
@@ -500,35 +540,106 @@ else:
                 st.sidebar.error(f"저장 실패: {e}")
 
     st.sidebar.divider()
-    auto_refresh = st.sidebar.checkbox("자동 새로고침 켜기 (PC 전광판용)")
 
+    auto_refresh = st.sidebar.checkbox("자동 새로고침 켜기 (PC 전광판용)")
     if auto_refresh:
-        # 5분(5 * 60 * 1000 = 300,000 밀리초)마다 새로고침
-        # limit=None으로 설정하면 무한으로 새로고침 됩니다.
         st_autorefresh(interval=5 * 60 * 1000, limit=None, key="dashboard_refresh")
         st.sidebar.info("🟢 현재 5분마다 화면이 자동 갱신 중입니다. \n\n⚠️ 데이터 입력/수정 중에는 이 기능을 꺼주세요!")
 
-    # 2. 간격을 비정상적으로 확 좁히고 싶을 때 (마이너스 값 사용)
-    # Streamlit의 기본 여백을 무시하고 위로 바짝 붙입니다.
-    # 💡 수정: 사이드바의 간격을 좁히기 위해 st.sidebar.markdown 사용
-    # st.sidebar.markdown("<div style='margin-top: -170px;'></div>", unsafe_allow_html=True)
-    # st.sidebar.divider()
-    # st.sidebar.markdown("<div style='margin-top: -170px;'></div>", unsafe_allow_html=True)
-    # st.sidebar.divider() 와 마이너스 여백 코드들을 전부 지우고, 아래 한 줄만 넣습니다.
-    # margin: 10px 0px; 에서 10px 숫자를 줄이면(예: 5px) 위아래 간격이 더 좁아집니다.
     st.sidebar.markdown("<hr style='margin: 10px 0px;'>", unsafe_allow_html=True)
 
-    # 💡 개선 1 & 3: 중복된 if is_admin 제거 및 Expander(접기/펴기) 사용
-    with st.sidebar.expander("📁 데이터 파일 업로드 (클릭하여 열기)", expanded=False):
+    # ==========================================
+    # 🌟 [수정된 부분 2] 기존의 단순한 '데이터 파일 업로드' Expander를 지우고,
+    # 직접 생성 + 템플릿 다운로드 + 규격 보정 기능이 모두 포함된 새로운 Expander로 교체했습니다.
+    # ==========================================
+    with st.sidebar.expander("⚙️ 데이터 관리 (생성 및 업로드)", expanded=False):
 
-        # 💡 개선 2: type=['csv'] 옵션을 주어 CSV 파일만 선택 가능하도록 강제
-        uploaded_file = st.file_uploader("1. 명단 파일(CSV) 업로드", type=['csv'])
-        if uploaded_file:
-            if st.button("명단 적용하기", use_container_width=True):
-                st.session_state.main_df = load_data(uploaded_file)
-                st.success("새로운 명부가 적용되었습니다.")
-                time.sleep(1)
-                st.rerun()
+        # 1. 어떤 데이터를 다룰지 선택 (선수명단 or 누적전적)
+        sheet_type = st.selectbox("작업할 시트 종류", ["선수명단", "누적전적", "상대전적"], key="sheet_select")
+        template_df = get_sheet_template(sheet_type)
+
+        # 2. 직접 타이핑할지, 엑셀(CSV)을 올릴지 선택
+        input_mode = st.radio("작업 방식", ["✍️ 직접 데이터 생성", "📁 CSV 파일 업로드"], key="mode_select")
+
+        st.divider()
+
+        # --- [모드 A] 직접 데이터 생성 ---
+        if input_mode == "✍️ 직접 데이터 생성":
+            with st.form(key=f"create_form_{sheet_type}"):
+                input_data = {}
+                # 템플릿 컬럼명에 맞춰서 입력칸을 자동으로 만들어줍니다.
+                for col in template_df.columns:
+                    # 🌟 [수정된 부분] '방이름' 컬럼일 경우 현재 구장 이름을 기본값으로 자동 세팅합니다.
+                    if col == "방이름":
+                        input_data[col] = st.text_input(f"{col} 입력", value=room_name)
+                    else:
+                        input_data[col] = st.text_input(f"{col} 입력")
+
+                submit_btn = st.form_submit_button("데이터 생성 및 적용", use_container_width=True)
+
+            if submit_btn:
+                new_row_df = pd.DataFrame([input_data])
+                # 메인 화면에 미리보기를 띄우기 위해 session_state에 임시 저장합니다.
+                st.session_state.preview_df = new_row_df
+                st.session_state.preview_msg = f"✅ 새로운 '{sheet_type}' 데이터가 생성되었습니다!"
+                st.success("생성 완료! 우측 메인 화면을 확인하세요.")
+
+        # --- [모드 B] CSV 파일 업로드 ---
+        elif input_mode == "📁 CSV 파일 업로드":
+            # 사용자가 헷갈리지 않게 빈 템플릿을 다운받을 수 있는 버튼
+            empty_template_csv = template_df.head(0).to_csv(index=False).encode('cp949')
+            st.download_button(
+                label=f"📥 '{sheet_type}' 빈 템플릿 다운로드",
+                data=empty_template_csv,
+                file_name=f"{sheet_type}_template.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
+            # 파일 업로더
+            uploaded_file = st.file_uploader("CSV 파일 업로드", type=['csv'])
+
+            if uploaded_file:
+                try:
+                    uploaded_file.seek(0)  # 에러 방지용 커서 초기화
+                    raw_df = pd.read_csv(uploaded_file, encoding='cp949')
+
+                    # 핵심: 업로드한 파일의 컬럼이 안 맞아도 강제로 규격을 맞춰줍니다.
+                    final_df = align_columns_to_template(raw_df, template_df)
+
+                    # 메인 화면에 미리보기를 띄우기 위해 임시 저장
+                    st.session_state.preview_df = final_df
+                    st.session_state.preview_msg = f"✅ 규격에 맞게 보정된 '{sheet_type}' 데이터입니다."
+
+                    # 기존 코드에 있던 '명단 적용하기' 버튼의 업그레이드 버전
+                    if st.button(f"'{sheet_type}' 적용하기", type="primary", use_container_width=True):
+                        # 선택한 시트 종류에 따라 알맞은 변수에 덮어씌웁니다.
+                        if sheet_type == "선수명단":
+                            st.session_state.main_df = final_df
+                        elif sheet_type == "누적전적":
+                            st.session_state.cum_df = final_df
+                        # 👇 이 부분이 추가되어야 상대전적 데이터가 실제 시스템에 반영됩니다.
+                        elif sheet_type == "상대전적":
+                            st.session_state.h2h_df = final_df
+
+                        st.success("새로운 데이터가 적용되었습니다.")
+                        time.sleep(1)
+                        st.rerun()
+
+                except pd.errors.EmptyDataError:
+                    st.error("업로드한 CSV 파일이 비어있습니다.")
+                except Exception as e:
+                    st.error(f"파일 처리 중 에러 발생: {e}")
+
+# ==========================================
+# 🌟 [새로 추가된 부분 2] 메인 화면 데이터 미리보기
+# 사이드바는 좁아서 표가 잘리므로, 사이드바 바깥(메인 화면)에 표를 그려줍니다.
+# (이 코드는 사이드바 들여쓰기(if/else)가 모두 끝난 맨 아래에 위치해야 합니다)
+# ==========================================
+if 'preview_df' in st.session_state:
+    st.subheader("👀 데이터 미리보기")
+    st.info(st.session_state.preview_msg)
+    st.dataframe(st.session_state.preview_df, use_container_width=True)
 
 # ---------------------------------------------------------
 # 3. 메인 화면 데이터 처리 (날짜 및 출석/조편성)
