@@ -47,11 +47,26 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/1x26ijdrwI9BKPXYM7IJAkTUVYZB
 
 # 시스템 관리자가 미리 만들어둔 빈 구글 시트 URL 리스트 (Pool)
 PRE_MADE_URLS = [
-    "https://docs.google.com/spreadsheets/d/미리만든주소1/edit",
-    "https://docs.google.com/spreadsheets/d/미리만든주소2/edit",
-    "https://docs.google.com/spreadsheets/d/미리만든주소3/edit",
-    "https://docs.google.com/spreadsheets/d/미리만든주소4/edit",
-    "https://docs.google.com/spreadsheets/d/미리만든주소5/edit"
+    "https://docs.google.com/spreadsheets/d/10wiPeAlcfVFG1Ea74T8tQmuOre4FtIULdFXt6h5DTfk/edit"
+    "https://docs.google.com/spreadsheets/d/1-FmAJWOb8I0l14wJOWgX98PFzR0MYKOB5rio455tXo0/edit"
+    "https://docs.google.com/spreadsheets/d/1AKfdQOo3EsodIJpgcuMd-A42xvaKhyIM-k-i93Eu_Lg/edit"
+    "https://docs.google.com/spreadsheets/d/1LJl3cBkVLhbNCzYhDqYcz84lKDqe76lY14hXUFkHC3c/edit"
+    "https://docs.google.com/spreadsheets/d/1ORJhzSxelwB2_uKlVa5rFOagTqgSdI6R3S400VC0-dA/edit"
+    "https://docs.google.com/spreadsheets/d/1R1BDavQ9Gi44Jl-QnNqvAQQb35qChWv608sSlUh-IZU/edit"
+    "https://docs.google.com/spreadsheets/d/1U9vKw_FFc55Ft-hdUkbY5mQwKDlzc6AsJWrXRNIxY8c/edit"
+    "https://docs.google.com/spreadsheets/d/1_5hVAmDeUG_PCJKx9-pPkWBmCBzNwnZz-KZoXSOJo44/edit"
+    "https://docs.google.com/spreadsheets/d/1n5iz4ZOlv6OUcNGQcojTZaCeGf5JdAEyeu-WoeIO1YA/edit"
+    "https://docs.google.com/spreadsheets/d/1Gwk0L-MY4s7Uwnv9K73oqdEzqNAjnXsTNjhHVKQcqJE/edit"
+    "https://docs.google.com/spreadsheets/d/1J6Pe71i1SHVg6t4vqv3k_FIaZkWPQeGwjmFZxk6lHWw/edit"
+    "https://docs.google.com/spreadsheets/d/1TO7Ny1Jy845N2OyJTceVmio8-DkfLKu25HbXvHJyBd8/edit"
+    "https://docs.google.com/spreadsheets/d/1VwQcD7CHkwt_J4F_PLMMaDkoZOV5x4uXTfyvgvvnD8c/edit"
+    "https://docs.google.com/spreadsheets/d/1WXwxbKzO4jNdv9eKM3cS9CrU8Vsm6bgwYWj-E3NyCTI/edit"
+    "https://docs.google.com/spreadsheets/d/1d6sQcSX-AWIGCv9zoMEO-Cui-z_2Ch3RbsDGAkbt50A/edit"
+    "https://docs.google.com/spreadsheets/d/1fU78i-onZOOYGdAdaamsANAuxPnAYoic-P2fHB4ojWk/edit"
+    "https://docs.google.com/spreadsheets/d/1gsj1vb5NUeDhVn26-0Jk9vYmpJmUmeHVZHXUMJYnfjg/edit"
+    "https://docs.google.com/spreadsheets/d/1bHpoOGeG9yfXeShVmrXASylSchrfzOddQhE2krfL8DA/edit"
+    "https://docs.google.com/spreadsheets/d/1mlvNNNHjCQRm5yGE4JtJseNUtDgWbkvlbJxxy4hYcDA/edit"
+    "https://docs.google.com/spreadsheets/d/1o3t1OhfeZuhdtx23bs2kGRGxjpXZcJeYqf1J3QYjrE4/edit"
 ]
 
 # Streamlit 페이지 기본 설정
