@@ -10,6 +10,7 @@ colorama==0.4.6
 cryptography==46.0.7
 decorator==5.2.1
 duckdb==1.5.2
+et_xmlfile==2.0.0
 gitdb==4.0.12
 GitPython==3.1.46
 google-auth==2.49.2
@@ -26,6 +27,7 @@ MarkupSafe==3.0.3
 narwhals==2.20.0
 numpy==2.4.4
 oauthlib==3.3.1
+openpyxl==3.1.5
 packaging==26.1
 pandas==3.0.2
 pillow==12.2.0
@@ -56,3 +58,4 @@ tzdata==2026.1
 urllib3==2.6.3
 validators==0.35.0
 watchdog==6.0.0
+xlsxwriter==3.2.9
