@@ -42,24 +42,10 @@ def hash_password(password):
 HASHED_MASTER_PW = hash_password(MASTER_PASSWORD)
 CURRENT_DATE = datetime.now().strftime('%Y-%m-%d')  # 오늘 날짜
 
-# user_information_DB.csv file을 지정함 (방이름, 관리자이름,이메일,전화번호, 생성일자, 비밀번호
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1x26ijdrwI9BKPXYM7IJAkTUVYZBgSqST6X9sVgwvhcE/edit"
-# 생활탁구장_동호회_리그 시트1, 선수명단, 누적전적, 상대전적
-SHEET_informal_URL = "https://docs.google.com/spreadsheets/d/1IjvnGRuumDNIcOyDmSay-7BNpsZ7BGeqSgJOmIDnw7w/edit"
-
-# 시스템 관리자가 미리 만들어둔 빈 구글 시트 URL 리스트 (Pool)
-PRE_MADE_URLS = [
-    "https://docs.google.com/spreadsheets/d/10wiPeAlcfVFG1Ea74T8tQmuOre4FtIULdFXt6h5DTfk/edit?usp=drive_link",
-    "https://docs.google.com/spreadsheets/d/13AJOBQdVbwa9Ns0gn-axCXeCZFD_vG_KRQOK7PY8Z2s/edit?usp=drive_link",
-    "https://docs.google.com/spreadsheets/d/1enY_4PuDYzId9D2CvZSP1ZxyKBOLLCdvmuxAWniu-jI/edit?usp=drive_link",
-    "https://docs.google.com/spreadsheets/d/1hstHIK5QX12nuJXpvqKFxz5VviEuuL3wssobhu924nM/edit?usp=drive_link",
-    "https://docs.google.com/spreadsheets/d/1Jh49Lw6ETt-7RrDU9CIpr59-yt8EI3iJ5OEs3I_X8Ro/edit?usp=drive_link",
-    "https://docs.google.com/spreadsheets/d/1-IgSML_F9AFA82LE6oyJ-Zk6AsgaAMIxhVtP3UJA7g4/edit?usp=drive_link",
-    "https://docs.google.com/spreadsheets/d/1enf6X5nZ6s2Zcei5WGhyWtPzLo1C4of5q8xGH8_Mv1I/edit?usp=drive_link",
-    "https://docs.google.com/spreadsheets/d/1z65-dIWFT1yqD4fmYVQZg4gscb0eyolH8LAY440gPGc/edit?usp=drive_link",
-    "https://docs.google.com/spreadsheets/d/1wmTk87ggrV5NqmWD7NapT82C-jZn6gCRolFidDx7ZJA/edit?usp=drive_link",
-    "https://docs.google.com/spreadsheets/d/1ff3cN3ufrqLglh_irOF5fim_PtuqSuHez5QeXfQh2qU/edit?usp=drive_link",
-]
+# st.secrets에서 URL 정보 불러오기
+SHEET_URL = st.secrets["sheet_url"]
+SHEET_informal_URL = st.secrets["sheet_informal_url"]
+PRE_MADE_URLS = st.secrets["pre_made_urls"]
 
 # Streamlit 페이지 기본 설정
 st.set_page_config(
@@ -494,7 +480,14 @@ if not is_admin:
 
                         try:
                             # gspread 클라이언트를 통해 스프레드시트 객체 가져오기
-                            sh = conn.client.open_by_url(target_url)
+                            # sh = conn.client.open_by_url(target_url)
+                            # ✅ 변경할 코드
+                            gc = gspread.service_account_from_dict(st.secrets["connections"]["gsheets"])
+                            sh = gc.open_by_url(target_url)
+
+                            # 🔥 [추가할 코드] 구글 드라이브에 있는 파일의 제목을 '방이름_DB'로 자동 변경합니다!
+                            sh.update_title(f"{new_room_name}_DB")
+
                             existing_sheets = [ws.title for ws in sh.worksheets()]
 
                             # 시트가 없으면 물리적으로 탭 추가
@@ -571,7 +564,11 @@ if not is_admin:
 
                         # 🔥 [수정 포인트 2] 빈 URL에 3개의 시트를 강제로 생성하는 로직 추가
                         try:
-                            sh = conn.client.open_by_url(assigned_url)
+                            # sh = conn.client.open_by_url(assigned_url)
+                            # ✅ 변경할 코드
+                            gc = gspread.service_account_from_dict(st.secrets["connections"]["gsheets"])
+                            sh = gc.open_by_url(assigned_url)
+
                             existing_sheets = [ws.title for ws in sh.worksheets()]
 
                             # 시트가 없으면 물리적으로 탭 추가
@@ -762,7 +759,29 @@ else:
                                 conn.update(spreadsheet=target_url, worksheet="누적전적", data=st.session_state.cum_df)
                                 conn.update(spreadsheet=target_url, worksheet="상대전적", data=st.session_state.h2h_df)
 
-                        st.success("✅ 데이터가 성공적으로 적용되고 클라우드에 저장되었습니다!")
+                                # 🔥 [추가된 부분] 구글 드라이브 상의 파일 이름 변경 로직
+                                try:
+                                    # 업로드된 파일 이름에서 확장자(.csv, .xlsx)를 제외한 이름 추출
+                                    new_file_name = uploaded_file.name.split('.')[0]
+
+                                    # 1. Streamlit secrets에 저장된 구글 서비스 계정 정보를 딕셔너리 형태로 가져옴
+                                    credentials_dict = dict(st.secrets["connections"]["gsheets"])
+
+                                    # 2. gspread 라이브러리를 직접 사용하여 인증 (conn.client 우회)
+                                    gc = gspread.service_account_from_dict(credentials_dict)
+
+                                    # 3. URL로 시트를 열고 제목 업데이트
+                                    spreadsheet = gc.open_by_url(target_url)
+                                    spreadsheet.update_title(new_file_name)
+
+                                    st.success(f"✅ 데이터 저장 완료 및 구글 시트 이름이 '{new_file_name}'(으)로 변경되었습니다!")
+                                except Exception as title_e:
+                                    # 이름 변경에 실패하더라도 데이터 저장은 완료되었음을 알림
+                                    st.warning(f"✅ 데이터는 저장되었으나 파일 이름 변경에 실패했습니다: {title_e}")
+                                    # sys.exit()
+                            else:
+                                st.success("✅ 데이터가 성공적으로 적용되었습니다! (클라우드 URL 없음)")
+
                         time.sleep(1.5)
                         st.rerun()
                     except Exception as e:
