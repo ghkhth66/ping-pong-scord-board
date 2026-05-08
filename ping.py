@@ -187,8 +187,9 @@ def load_data(uploaded_file=None):
             return pd.read_csv(uploaded_file, encoding='cp949')
     # 더미 데이터 생성
     data = [{"순서": i, "이름": f"회원{i}", "성별": random.choice(["남", "여"]),
-             "나이": random.randint(20, 75), "부수": f"{random.randint(1, 13)}부",
-             "부수_조정1": 0.0, "부수_조정2": 0.0, "부수_조정3": 0.0,
+             "부수": f"{random.randint(1, 13)}부",
+             "부수_조정": 0.0,
+             "조편성_신청":f"{random.randint(1, 6)}조",
              "참석예정": random.choice(["Y", "N"])} for i in range(1, 11)]
     return pd.DataFrame(data)
 
@@ -322,7 +323,25 @@ def get_sheet_template(sheet_type):
 def generate_excel_template():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        get_sheet_template("선수명단").to_excel(writer, sheet_name="선수명단", index=False)
+        # 🔥 [추가된 부분] 선수명단 시트에 들어갈 임의의 더미 데이터 생성
+        dummy_data = [
+            {
+                "순서": i,
+                "이름": f"회원{i}",
+                "참석예정": random.choice(["Y", "N"]),
+                "성별": random.choice(["남", "여"]),
+                "부수": f"{random.randint(1, 13)}부",
+                "부수_조정": 0.0,
+                "직책": "",  # 직책은 빈칸으로 둠
+                "조편성_신청": f"{random.randint(1, 6)}조"
+            } for i in range(1, 11)
+        ]
+
+        # 더미 데이터를 데이터프레임으로 변환
+        df_dummy_players = pd.DataFrame(dummy_data)
+        # 엑셀 시트에 각각 저장 (선수명단은 더미 데이터, 나머지는 빈 양식)
+        df_dummy_players.to_excel(writer, sheet_name="선수명단", index=False)
+        # get_sheet_template("선수명단").to_excel(writer, sheet_name="선수명단", index=False)
         get_sheet_template("누적전적").to_excel(writer, sheet_name="누적전적", index=False)
         get_sheet_template("상대전적").to_excel(writer, sheet_name="상대전적", index=False)
     processed_data = output.getvalue()
