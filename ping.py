@@ -697,7 +697,7 @@ else:
             st.download_button(
                 label="📥 표준 엑셀 템플릿 다운로드",
                 data=excel_data,
-                file_name=f"{st.session_state.room_name}_데이터양식.xlsx",
+                file_name=f"{st.session_state.room_name}_db.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 width='stretch'
             )
