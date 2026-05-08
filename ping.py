@@ -8,6 +8,7 @@ from datetime import datetime
 import math
 import io, time
 import hashlib
+import gspread  # 🔥 [수정 포인트] 구글 시트 탭(워크시트)을 직접 생성하기 위해 추가
 
 from streamlit_autorefresh import st_autorefresh
 
@@ -39,27 +40,37 @@ def hash_password(password):
 
 # 마스터 비밀번호 암호화 저장
 HASHED_MASTER_PW = hash_password(MASTER_PASSWORD)
-
 CURRENT_DATE = datetime.now().strftime('%Y-%m-%d')  # 오늘 날짜
 
 # user_information_DB.csv file을 지정함 (방이름, 관리자이름,이메일,전화번호, 생성일자, 비밀번호
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1x26ijdrwI9BKPXYM7IJAkTUVYZBgSqST6X9sVgwvhcE/edit"
-
-#생활탁구장_동호회_리그 시트1, 선수명단, 누적전적, 상대전적
+# 생활탁구장_동호회_리그 시트1, 선수명단, 누적전적, 상대전적
 SHEET_informal_URL = "https://docs.google.com/spreadsheets/d/1IjvnGRuumDNIcOyDmSay-7BNpsZ7BGeqSgJOmIDnw7w/edit"
 
-#생활탁구장_동호회_번개리그  시트1, 선수명단, 누적전적, 상대전적
-SHEET_informal_URL = "https://docs.google.com/spreadsheets/d/1_73U5OqbFqdCFeQjYEptx5l2U3x4mUb1laf0Bb-BzKI/edit"
+# 시스템 관리자가 미리 만들어둔 빈 구글 시트 URL 리스트 (Pool)
+PRE_MADE_URLS = [
+    "https://docs.google.com/spreadsheets/d/10wiPeAlcfVFG1Ea74T8tQmuOre4FtIULdFXt6h5DTfk/edit?usp=drive_link",
+    "https://docs.google.com/spreadsheets/d/13AJOBQdVbwa9Ns0gn-axCXeCZFD_vG_KRQOK7PY8Z2s/edit?usp=drive_link",
+    "https://docs.google.com/spreadsheets/d/1enY_4PuDYzId9D2CvZSP1ZxyKBOLLCdvmuxAWniu-jI/edit?usp=drive_link",
+    "https://docs.google.com/spreadsheets/d/1hstHIK5QX12nuJXpvqKFxz5VviEuuL3wssobhu924nM/edit?usp=drive_link",
+    "https://docs.google.com/spreadsheets/d/1Jh49Lw6ETt-7RrDU9CIpr59-yt8EI3iJ5OEs3I_X8Ro/edit?usp=drive_link",
+    "https://docs.google.com/spreadsheets/d/1-IgSML_F9AFA82LE6oyJ-Zk6AsgaAMIxhVtP3UJA7g4/edit?usp=drive_link",
+    "https://docs.google.com/spreadsheets/d/1enf6X5nZ6s2Zcei5WGhyWtPzLo1C4of5q8xGH8_Mv1I/edit?usp=drive_link",
+    "https://docs.google.com/spreadsheets/d/1z65-dIWFT1yqD4fmYVQZg4gscb0eyolH8LAY440gPGc/edit?usp=drive_link",
+    "https://docs.google.com/spreadsheets/d/1wmTk87ggrV5NqmWD7NapT82C-jZn6gCRolFidDx7ZJA/edit?usp=drive_link",
+    "https://docs.google.com/spreadsheets/d/1ff3cN3ufrqLglh_irOF5fim_PtuqSuHez5QeXfQh2qU/edit?usp=drive_link",
+]
 
-# Streamlit 페이지 기본 설정 (브라우저 탭 이름, 넓은 화면 모드 등)
+# Streamlit 페이지 기본 설정
 st.set_page_config(
     page_title="리그 운영 시스템",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# 쿠키 매니저 초기화
-cookies = EncryptedCookieManager(password="my_super_secret_cookie_password")
+# st.secrets를 통해 toml 파일에 저장된 비밀번호를 불러옵니다.
+cookies = EncryptedCookieManager(password=st.secrets.get("cookie_password", "default_fallback_password"))
+
 if not cookies.ready():
     st.stop()
 
@@ -118,13 +129,24 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)  # HTML과 CSS 태그가 문자열 그대로 출력되지 않고 실제 웹페이지에 적용되도록 허용하는 옵션
 
+def save_room_state(room_name):
+    """
+    현재 구장의 모든 진행 상황(세션 상태)을 pkl 파일로 저장하여 새로고침해도 날아가지 않게 함
+    """
+    pass
+
+def load_room_state(room_name):
+    """
+    저장된 pkl 파일에서 구장 데이터를 불러와 세션 상태를 복구하는 함수
+    """
+    pass
+
 
 # 1. 반응형 텍스트를 출력하는 함수 정의
 def responsive_text(text, pc_size="28px", mobile_size="18px", font_weight="bold", color="inherit"):
     """
-    PC와 모바일에서 글자 크기가 자동으로 변하는 텍스트를 출력하는 함수
+    PC와 모바일에서 글자 크기가 자동으로 변하는 텍스트를 출력하는 함수, 설정한 크기에 따라 고유한 CSS 클래스 이름 생성 (충돌 방지)
     """
-    # 설정한 크기에 따라 고유한 CSS 클래스 이름 생성 (충돌 방지)
     class_name = f"resp-text-{pc_size}-{mobile_size}".replace("px", "").replace(" ", "")
 
     # CSS 스타일 정의
@@ -155,11 +177,34 @@ def responsive_text(text, pc_size="28px", mobile_size="18px", font_weight="bold"
 def reset_config_state():
     """설정을 초기화할 때 기존에 만들어진 조 편성, 대진표 등의 데이터를 삭제하는 함수"""
     st.session_state.config_confirmed = False
-
     keys_to_delete = ['matrix', 'ind_matrix', 'teams', 'draw_results']
 
     for k in keys_to_delete:
         if k in st.session_state: del st.session_state[k]
+
+
+def extract_busu(busu_str):
+    """'3부', '4부' 같은 문자열에서 숫자(3, 4)만 추출하여 계산에 사용할 수 있게 변환"""
+    try:
+        nums = re.findall(r'\d+', str(busu_str))
+        return float(nums[0]) if nums else 9.0
+    except:
+        return 9.0
+
+def load_data(uploaded_file=None):
+    #사용하지 않음
+    """회원 명단 CSV 파일을 불러오는 함수. 파일이 없으면 테스트용 더미 데이터를 생성함"""
+    if uploaded_file is not None:
+        try:
+            return pd.read_csv(uploaded_file, encoding='utf-8-sig')
+        except:
+            return pd.read_csv(uploaded_file, encoding='cp949')
+    # 더미 데이터 생성
+    data = [{"순서": i, "이름": f"회원{i}", "성별": random.choice(["남", "여"]),
+             "나이": random.randint(20, 75), "부수": f"{random.randint(1, 13)}부",
+             "부수_조정1": 0.0, "부수_조정2": 0.0, "부수_조정3": 0.0,
+             "참석예정": random.choice(["Y", "N"])} for i in range(1, 11)]
+    return pd.DataFrame(data)
 
 
 def update_cumulative_record(p_a, p_b, s_a, s_b):
@@ -172,13 +217,26 @@ def update_cumulative_record(p_a, p_b, s_a, s_b):
         st.session_state.cum_df = pd.DataFrame(columns=['방이름', '이름', '총경기수', '승', '패', '득점', '실점'])
 
     df_cum = st.session_state.cum_df
-    room = st.session_state.room_name
+    # 방이름이 없을 경우를 대비한 기본값 설정
+    room = st.session_state.get('room_name', '기본방')
 
     # 내부 함수: 명단에 없는 새로운 선수면 데이터프레임에 0전 0승 0패로 새로 추가하는 역할
     def ensure_player(df, name):
-        if name not in df['이름'].values:
-            new_row = pd.DataFrame([{'이름': name, '총경기수': 0, '승': 0, '패': 0, '득점': 0, '실점': 0}])
-            # 기존 표(df) 아래에 새로운 행(new_row)을 이어 붙임 (ignore_index=True로 인덱스 번호 재배열)
+        # [추가] 만약 df에 필요한 컬럼이 없다면 즉시 생성 (에러 방지)
+        required_columns = ['방이름', '이름', '총경기수', '승', '패', '득점', '실점']
+        for col in required_columns:
+            if col not in df.columns:
+                df[col] = 0 if col in ['총경기수', '승', '패', '득점', '실점'] else None
+
+        # 이제 '이름' 컬럼이 확실히 존재하므로 mask 생성이 안전합니다.
+        mask = (df['이름'] == name) & (df['방이름'] == room)
+
+        if not df[mask].any().any():
+            new_row = pd.DataFrame([{
+                '방이름': room,
+                '이름': name,
+                '총경기수': 0, '승': 0, '패': 0, '득점': 0, '실점': 0
+            }])
             df = pd.concat([df, new_row], ignore_index=True)
         return df
 
@@ -188,20 +246,22 @@ def update_cumulative_record(p_a, p_b, s_a, s_b):
 
     for p, win, lose, score, opp_score in [(p_a, s_a > s_b, s_a < s_b, s_a, s_b),
                                            (p_b, s_b > s_a, s_b < s_a, s_b, s_a)]:
-        if p != "선택안함":  # 실제 선수인 경우에만 기록 업데이트
-            # 해당 선수가 있는 행의 위치(인덱스 번호)를 찾음
-            idx = df_cum[df_cum['이름'] == p].index[0]
-
-            # .at[행, 열]을 사용하여 해당 선수의 기록에 값을 더해줌 (+=)
-            df_cum.at[idx, '총경기수'] += 1
-            df_cum.at[idx, '승'] += 1 if win else 0  # 이겼으면 1을 더하고, 아니면 0을 더함
-            df_cum.at[idx, '패'] += 1 if lose else 0  # 졌으면 1을 더하고, 아니면 0을 더함
-            df_cum.at[idx, '득점'] += score  # 내가 낸 점수를 득점에 누적
-            df_cum.at[idx, '실점'] += opp_score  # 상대가 낸 점수를 실점에 누적
+        if p != "선택안함":
+            # 해당 방의 해당 선수 인덱스 찾기
+            mask = (df_cum['이름'] == p) & (df_cum['방이름'] == room)
+            idx_list = df_cum[mask].index
+            if not idx_list.empty:
+                idx = idx_list[0]
+                df_cum.at[idx, '총경기수'] += 1
+                df_cum.at[idx, '승'] += 1 if win else 0
+                df_cum.at[idx, '패'] += 1 if lose else 0
+                df_cum.at[idx, '득점'] += score
+                df_cum.at[idx, '실점'] += opp_score
 
     # 업데이트된 표를 다시 세션 상태에 저장하여 화면에 반영되게 함
     st.session_state.cum_df = df_cum
 
+    # 4. 상대 전적(Head to Head) 업데이트
     if p_a != "선택안함" and p_b != "선택안함":
 
         # 상대 전적 표(h2h_df)가 없으면 새로 만듦
@@ -211,18 +271,28 @@ def update_cumulative_record(p_a, p_b, s_a, s_b):
 
         h2h = st.session_state.h2h_df
 
+        # ★ [수정 포인트 1] h2h 데이터프레임에 필수 컬럼이 누락되어 KeyError가 발생하는 것을 완벽 방지
+        required_h2h_cols = ['방이름', 'Player1', 'Player2', 'P1_Win', 'P2_Win', 'P1_Score', 'P2_Score']
+        for col in required_h2h_cols:
+            if col not in h2h.columns:
+                h2h[col] = 0 if 'Win' in col or 'Score' in col else None
+
         # ★ 핵심: A vs B 와 B vs A 가 따로 기록되는 것을 막기 위해 이름을 가나다(알파벳) 순으로 정렬
         p1, p2 = sorted([p_a, p_b])
 
-        # 표에서 Player1이 p1이고, Player2가 p2인 행을 찾는 조건(마스크) 생성
-        mask = (h2h['Player1'] == p1) & (h2h['Player2'] == p2)
+        # 방이름 조건을 추가하여 다른 클럽 데이터와 섞이지 않게 함
+        mask = (h2h['Player1'] == p1) & (h2h['Player2'] == p2) & (h2h['방이름'] == room)
 
         # 만약 두 사람의 맞대결 기록이 아예 없다면 새로 0승 0패로 만들어줌
         if not mask.any():
-            new_row = pd.DataFrame(
-                [{'방이름': room, 'Player1': p1, 'Player2': p2, 'P1_Win': 0, 'P2_Win': 0, 'P1_Score': 0, 'P2_Score': 0}])
+            new_row = pd.DataFrame([{
+                '방이름': room, 'Player1': p1, 'Player2': p2,
+                'P1_Win': 0, 'P2_Win': 0, 'P1_Score': 0, 'P2_Score': 0
+            }])
+
             h2h = pd.concat([h2h, new_row], ignore_index=True)
-            mask = (h2h['Player1'] == p1) & (h2h['Player2'] == p2)
+            # 행 추가 후 다시 마스크 갱신
+            mask = (h2h['Player1'] == p1) & (h2h['Player2'] == p2) & (h2h['방이름'] == room)
 
         # 해당 맞대결 기록이 있는 행의 위치(인덱스)를 찾음
         idx = h2h[mask].index[0]
@@ -233,7 +303,7 @@ def update_cumulative_record(p_a, p_b, s_a, s_b):
             h2h.at[idx, 'P2_Win'] += 1 if s_b > s_a else 0
             h2h.at[idx, 'P1_Score'] += s_a
             h2h.at[idx, 'P2_Score'] += s_b
-        else:  # p1이 원래 p_b 였던 경우 (이름 순 정렬 때문에 자리가 바뀐 경우)
+        else:
             h2h.at[idx, 'P1_Win'] += 1 if s_b > s_a else 0
             h2h.at[idx, 'P2_Win'] += 1 if s_a > s_b else 0
             h2h.at[idx, 'P1_Score'] += s_b
@@ -249,188 +319,112 @@ def update_cumulative_record(p_a, p_b, s_a, s_b):
 def get_sheet_template(sheet_type):
     """선택한 시트 종류에 맞는 빈 컬럼 구조를 반환합니다."""
     if sheet_type == "선수명단":
-        # 🌟 [수정된 부분] 말씀하신 필수 컬럼들을 모두 추가했습니다.
-        # (기존에 있던 부서, 탁구등급 등과 함께 필요에 맞게 순서를 조정하셔도 됩니다)
-        return pd.DataFrame({
-            # "선수ID": [],
-            "이름": [],
-            "부수": [],  # 👈 추가됨
-            "참석예정": [],  # 👈 추가됨
-            "참석": [],  # 👈 추가됨
-            "조편성_신청": []  # 👈 추가됨
-        })
+        # UI에서 사용하는 '순서', '직책' 등을 포함하여 템플릿을 강화합니다.
+        return pd.DataFrame({"순서": [], "이름": [], "참석예정": [], "성별": [], "부수": [],  "부수_조정": [], "직책": [],  "조편성_신청": []})
 
     elif sheet_type == "누적전적":
-        return pd.DataFrame({
-            "경기일자": [], "선수1": [], "선수2": [], "세트스코어": [], "승자": [], "비고": []
-        })
+        # 🚨 update_cumulative_record 함수에서 실제 사용하는 컬럼명으로 완벽히 일치시킵니다.
+        return pd.DataFrame({"방이름": [], "이름": [], "총경기수": [], "승": [], "패": [], "득점": [], "실점": []})
 
     elif sheet_type == "상대전적":
-        return pd.DataFrame({
-            "방이름": [], "Player1": [], "Player2": [], "P1_Win": [], "P2_Win": [], "P1_Score": [], "P2_Score": []
-        })
+        return pd.DataFrame(
+            {"방이름": [], "Player1": [], "Player2": [], "P1_Win": [], "P2_Win": [], "P1_Score": [], "P2_Score": []})
 
     return pd.DataFrame()
 
-# ==========================================
-# 2. 업로드된 데이터의 컬럼을 템플릿에 맞게 보정하는 함수
-# ==========================================
+
+def generate_excel_template():
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        get_sheet_template("선수명단").to_excel(writer, sheet_name="선수명단", index=False)
+        get_sheet_template("누적전적").to_excel(writer, sheet_name="누적전적", index=False)
+        get_sheet_template("상대전적").to_excel(writer, sheet_name="상대전적", index=False)
+    processed_data = output.getvalue()
+    return processed_data
+
+
 def align_columns_to_template(uploaded_df, template_df):
     expected_columns = template_df.columns.tolist()
     for col in expected_columns:
         if col not in uploaded_df.columns:
             uploaded_df[col] = None
-    # return uploaded_df[expected_columns]
-    # ✅ 날짜처럼 추가된 컬럼도 유지하도록 수정
     return uploaded_df
-
-
-def extract_busu(busu_str):
-    """'3부', '4부' 같은 문자열에서 숫자(3, 4)만 추출하여 계산에 사용할 수 있게 변환"""
-    try:
-        nums = re.findall(r'\d+', str(busu_str))
-        return float(nums[0]) if nums else 9.0
-    except:
-        return 9.0
 
 
 @st.dialog("📊 역대 누적 상대 전적")
 def show_h2h_dialog(player_a, player_b):
     """두 선수를 선택했을 때 팝업창으로 역대 전적을 보여주는 함수"""
-    # 1. 데이터 검색을 위한 이름 정렬 _ 이전 코드에서 저장할 때 가나다순으로 정렬했으므로, 불러올 때도 똑같이 정렬해야 데이터를 찾을 수 있습니다.
     p1, p2 = sorted([player_a, player_b])
-
-    # 2. 세션 상태에서 상대 전적 표(h2h_df) 불러오기 _ 만약 데이터가 아예 없다면 에러가 나지 않도록 빈 표(pd.DataFrame())를 기본값으로 가져옵니다.
     h2h = st.session_state.get('h2h_df', pd.DataFrame())
 
-    # 3. 표가 비어있지 않은지 확인
     if not h2h.empty:
+        if 'Player1' in h2h.columns and 'Player2' in h2h.columns:
+            mask = (h2h['Player1'] == p1) & (h2h['Player2'] == p2)
 
-        # p1과 p2가 맞붙은 기록이 있는지 찾는 조건(마스크) 생성
-        mask = (h2h['Player1'] == p1) & (h2h['Player2'] == p2)
+            if mask.any():
+                record = h2h[mask].iloc[0]
+                p1_w, p2_w = record.get('P1_Win', 0), record.get('P2_Win', 0)
+                p1_s, p2_s = record.get('P1_Score', 0), record.get('P2_Score', 0)
 
-        # 해당 조건에 맞는 데이터가 하나라도 존재한다면
-        if mask.any():
-            # .iloc[0]을 사용해 검색된 결과 중 첫 번째 줄(행)의 데이터를 통째로 가져옵니다.
-            record = h2h[mask].iloc[0]
+                st.markdown(
+                    f"<h3 style='text-align: center; color: #28a745;'>{p1} <span style='color:gray;'>vs</span> {p2}</h3>",
+                    unsafe_allow_html=True)
+                st.markdown(f"<p style='text-align: center; font-size:1.1rem;'>총 <b>{p1_w + p2_w}</b>전 맞대결</p>",
+                            unsafe_allow_html=True)
 
-            # 표에 적힌 승수와 득점 데이터를 각각의 변수에 나누어 담습니다.
-            p1_w, p2_w = record['P1_Win'], record['P2_Win']
-            p1_s, p2_s = record['P1_Score'], record['P2_Score']
-
-            # 4. 팝업창 상단 제목 및 총 경기 수 출력 (HTML/CSS 활용)
-            st.markdown(
-                f"<h3 style='text-align: center; color: #28a745;'>{p1} <span style='color:gray;'>vs</span> {p2}</h3>",
-                unsafe_allow_html=True)
-            st.markdown(f"<p style='text-align: center; font-size:1.1rem;'>총 <b>{p1_w + p2_w}</b>전 맞대결</p>",
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.info(
+                        f"<div style='text-align:center; font-size:1.2rem;'><b>{p1}</b><br><br>🏆 <b>{p1_w}</b> 승<br>🎯 {p1_s} 득점</div>",
                         unsafe_allow_html=True)
+                with c2:
+                    st.error(
+                        f"<div style='text-align:center; font-size:1.2rem;'><b>{p2}</b><br><br>🏆 <b>{p2_w}</b> 승<br>🎯 {p2_s} 득점</div>",
+                        unsafe_allow_html=True)
+                st.write("")
+                if st.button("닫기", width='stretch'): st.rerun()
+                return
 
-            c1, c2 = st.columns(2)
-            with c1:
-                st.info(
-                    f"<div style='text-align:center; font-size:1.2rem;'><b>{p1}</b><br><br>🏆 <b>{p1_w}</b> 승<br>🎯 {p1_s} 득점</div>",
-                    unsafe_allow_html=True)
-            with c2:
-                st.error(
-                    f"<div style='text-align:center; font-size:1.2rem;'><b>{p2}</b><br><br>🏆 <b>{p2_w}</b> 승<br>🎯 {p2_s} 득점</div>",
-                    unsafe_allow_html=True)
+    st.warning("아직 두 선수의 누적 맞대결 기록이 없습니다.")
+    if st.button("닫기", width='stretch'): st.rerun()
 
-            st.write("")  # 약간의 빈 줄(여백) 추가
-
-            # 6. 닫기 버튼 _ use_container_width=True를 주어 버튼이 팝업창 가로 길이에 꽉 차게 만듦
-            if st.button("닫기", use_container_width=True):
-                st.rerun()  # 버튼을 누르면 화면을 새로고침하여 팝업창을 닫음
-
-            return  # 전적을 성공적으로 보여줬으므로 여기서 함수를 종료함
-
-    # 7. 만약 표가 비어있거나, 두 사람의 맞대결 기록이 없을 경우 실행되는 부분
-    st.warning("아직 두 선수의 누적 맞대결 기록이 없습니다.")  # 노란색 경고창 출력
-    if st.button("닫기", use_container_width=True):
-        st.rerun()
-
-def load_data(uploaded_file=None):
-    """
-    여러 클럽의 다양한 CSV 인코딩(UTF-8, CP949 등)을 자동으로 감지하여 로드합니다.
-    """
-    if uploaded_file is not None:
-        # 시도할 인코딩 목록 (한글 환경에서 가장 빈번한 순서)
-        encodings = ['utf-8-sig', 'utf-8', 'cp949', 'euc-kr']
-
-        for enc in encodings:
-            try:
-                # [중요] 이전 시도에서 실패했을 경우를 대비해 읽기 위치를 처음으로 되돌림
-                uploaded_file.seek(0)
-                return pd.read_csv(uploaded_file, encoding=enc)
-            except (UnicodeDecodeError, UnicodeError):
-                continue  # 다음 인코딩 시도
-
-        # 모든 시도가 실패했을 경우 에러 메시지 출력
-        st.error("파일의 글자 인코딩을 인식할 수 없습니다. 엑셀에서 'CSV UTF-8' 형식으로 다시 저장해 주세요.")
-        return pd.DataFrame()  # 빈 데이터프레임 반환
-
-    # 파일이 업로드되지 않았을 때의 더미 데이터 생성 로직 (기존 유지)
-    data = []
-    for i in range(1, 51):
-        data.append({
-            "순서": i,
-            "이름": f"회원{i}",
-            "성별": random.choice(["남", "여"]),
-            "부수": f"{random.randint(1, 13)}부",
-            "조편성_신청": random.choice(["토끼", "여우", "곰", "호랑이"]),
-            "참석예정": random.choice(["Y", "N"])
-        })
-    return pd.DataFrame(data)
-
-
-# 💡 [적용 포인트 1: st.session_state]
-# 화면이 재실행되어도 유지되어야 하는 핵심 데이터(권한, 방이름, 명단 등)를 세션에 저장합니다.
-if 'is_admin' not in st.session_state:
-    st.session_state.is_admin = False
-
-if 'room_name' not in st.session_state:
-    st.session_state.room_name = "생활_탁구장"
-
-if 'main_df' not in st.session_state:
-    st.session_state.main_df = load_data()
-
-if 'attendance_confirmed' not in st.session_state:
-    st.session_state.attendance_confirmed = False
-
-if 'config_confirmed' not in st.session_state:
-    st.session_state.config_confirmed = False
 
 # ==========================================
-# 🌐 구글 시트 연결 및 데이터 로드
+# 🌐 세션 초기화 및 구글 시트 연결
 # ==========================================
+if 'is_admin' not in st.session_state: st.session_state.is_admin = False
+if 'room_name' not in st.session_state: st.session_state.room_name = "생활_탁구장"
+if 'main_df' not in st.session_state: st.session_state.main_df = get_sheet_template("선수명단")
+if 'cum_df' not in st.session_state: st.session_state.cum_df = get_sheet_template("누적전적")
+if 'h2h_df' not in st.session_state: st.session_state.h2h_df = get_sheet_template("상대전적")
+if 'attendance_confirmed' not in st.session_state: st.session_state.attendance_confirmed = False
+if 'config_confirmed' not in st.session_state: st.session_state.config_confirmed = False
+
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 💡 [적용 포인트 2: @st.cache_data]
-# 구글 시트에서 방 목록을 가져오는 작업은 무거우므로 캐싱 처리합니다. (10분 유지)
-# 화면이 재실행될 때마다 API를 호출하는 것을 방지하여 속도를 크게 높입니다.
 @st.cache_data(ttl=600)
 def load_room_list():
     try:
-        # SHEET_URL은 구장 정보가 담긴 마스터 시트
         db_df = conn.read(spreadsheet=SHEET_URL, worksheet="시트1", ttl=0)
-        # 컬럼: 방이름, 관리자이름, 이메일, 비밀번호, 생성일자, 시트URL
         room_list = db_df['방이름'].tolist() if not db_df.empty else []
         return db_df, room_list
-
     except Exception as e:
         st.error(f"마스터 DB 연결 실패: {e}")
         return pd.DataFrame(), []
 
-
-# [도움 함수] 마스터 DB에서 특정 방의 전용 시트 URL을 찾아오는 함수
 def get_current_room_sheet_url(target_room):
-    """마스터 DB(db_df)에서 선택된 방의 전용 구글 시트 URL을 반환합니다."""
-    # db_df는 상단에서 이미 load_room_list()를 통해 가져온 상태여야 합니다.
     try:
         url = db_df.loc[db_df['방이름'] == target_room, '시트URL'].values[0]
         return url
     except:
         return None
 
+def get_available_url(db_df):
+    used_urls = db_df['시트URL'].dropna().tolist() if not db_df.empty else []
+    for url in PRE_MADE_URLS:
+        if url not in used_urls:
+            return url
+    return None
 
 # ==========================================
 # 🟢 메인 로직 시작
@@ -455,13 +449,12 @@ if not is_admin:
             login_room_name = st.selectbox("구장명 (방 이름) 선택", options=room_list, index=default_index)
             admin_password = st.text_input("관리자 비밀번호 (조회 시 생략 가능)", type="password")
 
-            submit_login = st.form_submit_button("로그인", use_container_width=True)
+            submit_login = st.form_submit_button("로그인", width='stretch')
 
         if submit_login:
             st.session_state.room_name = login_room_name
             is_valid_admin = False
 
-            # 비밀번호 검증
             if admin_password:
                 hashed_pw = hash_password(admin_password)
                 if hashed_pw == HASHED_MASTER_PW:
@@ -475,7 +468,6 @@ if not is_admin:
                     else:
                         st.sidebar.error("❌ 비밀번호가 틀렸습니다.")
 
-            # 로그인 처리 (관리자 또는 일반 조회)
             if is_valid_admin or not admin_password:
                 if is_valid_admin:
                     st.session_state.is_admin = True
@@ -483,7 +475,6 @@ if not is_admin:
                 cookies["last_room"] = login_room_name
                 cookies.save()
 
-                # 🔥 [핵심] 선택한 구장의 전용 시트 URL 가져오기
                 target_url = get_current_room_sheet_url(login_room_name)
 
                 if target_url:
@@ -492,13 +483,38 @@ if not is_admin:
                         st.session_state.main_df = conn.read(spreadsheet=target_url, worksheet="선수명단", ttl=0)
                         st.session_state.cum_df = conn.read(spreadsheet=target_url, worksheet="누적전적", ttl=0)
                         st.session_state.h2h_df = conn.read(spreadsheet=target_url, worksheet="상대전적", ttl=0)
-                    except Exception as e:
-                        st.sidebar.warning("⚠️ 전용 시트 연결 실패. 기본 시트 구조를 생성합니다.")
-                        st.session_state.main_df = pd.DataFrame(columns=["이름", "부수", "참석예정", "참석", "조편성_신청"])
-                        st.session_state.cum_df = pd.DataFrame(columns=['방이름', '이름', '총경기수', '승', '패', '득점', '실점'])
-                        st.session_state.h2h_df = pd.DataFrame(
-                            columns=['방이름', 'Player1', 'Player2', 'P1_Win', 'P2_Win', 'P1_Score', 'P2_Score'])
 
+                    except Exception as e:
+                        # 🔥 [수정 포인트 1] 기존 구장 접속 시 시트가 없으면 강제로 3개의 시트를 생성합니다.
+                        st.sidebar.warning("⚠️ 전용 시트가 없거나 비어있습니다. 3개의 시트를 새로 생성합니다.")
+
+                        empty_main = get_sheet_template("선수명단")
+                        empty_cum = get_sheet_template("누적전적")
+                        empty_h2h = get_sheet_template("상대전적")
+
+                        try:
+                            # gspread 클라이언트를 통해 스프레드시트 객체 가져오기
+                            sh = conn.client.open_by_url(target_url)
+                            existing_sheets = [ws.title for ws in sh.worksheets()]
+
+                            # 시트가 없으면 물리적으로 탭 추가
+                            if "선수명단" not in existing_sheets:
+                                sh.add_worksheet(title="선수명단", rows="1000", cols="20")
+                            if "누적전적" not in existing_sheets:
+                                sh.add_worksheet(title="누적전적", rows="1000", cols="20")
+                            if "상대전적" not in existing_sheets:
+                                sh.add_worksheet(title="상대전적", rows="1000", cols="20")
+
+                            # 생성된 시트에 기본 컬럼 업데이트
+                            conn.update(spreadsheet=target_url, worksheet="선수명단", data=empty_main)
+                            conn.update(spreadsheet=target_url, worksheet="누적전적", data=empty_cum)
+                            conn.update(spreadsheet=target_url, worksheet="상대전적", data=empty_h2h)
+                        except Exception as inner_e:
+                            st.sidebar.error(f"시트 자동 생성 중 오류 발생: {inner_e}")
+
+                        st.session_state.main_df = empty_main
+                        st.session_state.cum_df = empty_cum
+                        st.session_state.h2h_df = empty_h2h
                 time.sleep(1)
                 st.rerun()
 
@@ -512,59 +528,85 @@ if not is_admin:
             admin_name = st.text_input("관리자 이름 (대표자명)")
             admin_email = st.text_input("관리자 이메일 (비밀번호 분실 시 필요)")
             new_room_pw = st.text_input("새 구장 비밀번호 설정", type="password")
-            # 🔥 구장별 개별 전용 시트 URL 입력
             new_room_sheet_url = st.text_input("이 구장에서 사용할 구글 시트 URL (전용)")
 
-            submit_create = st.form_submit_button("새 구장 생성하기", type="primary", use_container_width=True)
+            submit_create = st.form_submit_button("새 구장 생성하기", type="primary", width='stretch')
 
         if submit_create:
-            if not new_room_name or not admin_name or not admin_email or not new_room_pw or not new_room_sheet_url:
+            if not new_room_name or not admin_name or not admin_email or not new_room_pw:
                 st.warning("모든 정보를 빠짐없이 입력해주세요.")
             elif new_room_name in db_df['방이름'].values:
                 st.error(f"⚠️ '{new_room_name}'(은)는 이미 존재하는 구장입니다.")
+
             else:
+                assigned_url = get_available_url(db_df)
+                if not assigned_url:
+                    st.error("❌ 시스템에 할당 가능한 빈 시트가 없습니다. 시스템 관리자에게 문의하세요.")
+                    st.stop()
+
                 hashed_pw = hash_password(new_room_pw)
                 new_data = pd.DataFrame([{
                     "방이름": new_room_name,
                     "관리자이름": admin_name,
                     "이메일": admin_email,
                     "비밀번호": hashed_pw,
-                    "시트URL": new_room_sheet_url,
+                    "시트URL": assigned_url,
                     "생성일자": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }])
 
                 try:
-                    # 마스터 DB 업데이트
                     updated_df = pd.concat([db_df, new_data], ignore_index=True)
                     conn.update(spreadsheet=SHEET_URL, worksheet="시트1", data=updated_df)
                     load_room_list.clear()
 
-                    # 🔥 [자동 진입] 생성 즉시 해당 방 관리자로 세션 설정
                     st.session_state.room_name = new_room_name
                     st.session_state.is_admin = True
                     cookies["last_room"] = new_room_name
                     cookies.save()
 
-                    try:
-                        # 🔥 추가: 새 구장 생성 시 입력한 URL에서 데이터를 즉시 로드
-                        with st.spinner("기존 시트 데이터 불러오는 중..."):
-                            st.session_state.main_df = conn.read(spreadsheet=new_room_sheet_url, worksheet="선수명단",
-                                                                 ttl=0)
-                            st.session_state.cum_df = conn.read(spreadsheet=new_room_sheet_url, worksheet="누적전적", ttl=0)
-                            st.session_state.h2h_df = conn.read(spreadsheet=new_room_sheet_url, worksheet="상대전적", ttl=0)
+                    with st.spinner("구장 전용 데이터베이스를 초기화 중입니다... (약 5\~10초 소요)"):
+                        empty_main = get_sheet_template("선수명단")
+                        empty_cum = get_sheet_template("누적전적")
+                        empty_h2h = get_sheet_template("상대전적")
 
-                    except Exception as e:
-                        # 시트에 해당 탭이 없을 경우에만 빈 데이터프레임 생성
-                        st.session_state.main_df = pd.DataFrame(columns=["이름", "부수", "참석예정", "참석", "조편성_신청"])
-                        st.session_state.cum_df = pd.DataFrame(columns=['방이름', '이름', '총경기수', '승', '패', '득점', '실점'])
-                        st.session_state.h2h_df = pd.DataFrame(
-                            columns=['방이름', 'Player1', 'Player2', 'P1_Win', 'P2_Win', 'P1_Score', 'P2_Score'])
+                        # 🔥 [수정 포인트 2] 빈 URL에 3개의 시트를 강제로 생성하는 로직 추가
+                        try:
+                            sh = conn.client.open_by_url(assigned_url)
+                            existing_sheets = [ws.title for ws in sh.worksheets()]
+
+                            # 시트가 없으면 물리적으로 탭 추가
+                            if "선수명단" not in existing_sheets:
+                                sh.add_worksheet(title="선수명단", rows="1000", cols="20")
+                            if "누적전적" not in existing_sheets:
+                                sh.add_worksheet(title="누적전적", rows="1000", cols="20")
+                            if "상대전적" not in existing_sheets:
+                                sh.add_worksheet(title="상대전적", rows="1000", cols="20")
+
+                            # 기본 '시트1'이 남아있다면 깔끔하게 삭제 (선택사항)
+                            for ws_name in ["시트1", "Sheet1"]:
+                                if ws_name in existing_sheets and len(sh.worksheets()) > 1:
+                                    try:
+                                        sh.del_worksheet(sh.worksheet(ws_name))
+                                    except:
+                                        pass
+                        except Exception as e:
+                            st.error(f"시트 생성 중 오류 발생: {e}")
+
+                        # 생성된 시트에 기본 컬럼 업데이트
+                        conn.update(spreadsheet=assigned_url, worksheet="선수명단", data=empty_main)
+                        conn.update(spreadsheet=assigned_url, worksheet="누적전적", data=empty_cum)
+                        conn.update(spreadsheet=assigned_url, worksheet="상대전적", data=empty_h2h)
+
+                        st.session_state.main_df = empty_main
+                        st.session_state.cum_df = empty_cum
+                        st.session_state.h2h_df = empty_h2h
 
                     st.success(f"✅ '{new_room_name}' 구장이 생성되었습니다! 바로 접속합니다.")
                     time.sleep(1.5)
                     st.rerun()
                 except Exception as e:
                     st.error(f"DB 저장 중 오류가 발생했습니다: {e}")
+
 else:
     # ==========================================
     # 🟢 [로그인 후] 관리자 모드 사이드바
@@ -572,30 +614,27 @@ else:
     st.sidebar.markdown(f"### 🏟️ {room_name} 구장")
     st.sidebar.success("👑 관리자 모드로 접속 중입니다.")
 
-    if st.sidebar.button("🔒 로그아웃", use_container_width=True):
+    if st.sidebar.button("🔒 로그아웃", width='stretch'):
         st.session_state.is_admin = False
         st.rerun()
 
     st.sidebar.divider()
 
-    # 🛠️ [수정된 부분 1] 기존 코드에 '클라우드 동기화' 부분이 똑같이 2번 중복되어 있어서 하나를 삭제했습니다.
     st.sidebar.markdown("#### ☁️ 클라우드 동기화")
-    if st.sidebar.button("💾 오늘의 최종 결과 구글시트 저장", type="primary", use_container_width=True):
-        # 1. 현재 접속 중인 방 이름이 세션에 있는지 확인
+
+    if st.sidebar.button("💾 오늘의 최종 결과 구글시트 저장", type="primary", width='stretch'):
         if "room_name" in st.session_state and st.session_state.room_name:
             with st.spinner("해당 구장 전용 시트에 저장 중..."):
                 try:
-                    # 🔥 [수정 포인트] 함수 호출 시 현재 방 이름을 반드시 전달해야 합니다.
                     target_sheet_url = get_current_room_sheet_url(st.session_state.room_name)
 
                     if target_sheet_url:
-                        # 마스터가 아닌 '개별 구장 전용 시트'에 저장
                         conn.update(spreadsheet=target_sheet_url, worksheet="선수명단", data=st.session_state.main_df)
                         conn.update(spreadsheet=target_sheet_url, worksheet="누적전적", data=st.session_state.cum_df)
                         conn.update(spreadsheet=target_sheet_url, worksheet="상대전적", data=st.session_state.h2h_df)
                         st.sidebar.success(f"✅ {st.session_state.room_name} 전용 시트 저장 완료!")
                     else:
-                        st.sidebar.error("❌ 이 구장의 전용 시트 URL을 찾을 수 없습니다. (마스터 DB 확인 필요)")
+                        st.sidebar.error("❌ 이 구장의 전용 시트 URL을 찾을 수 정 없습니다. (마스터 DB 확인 필요)")
                 except Exception as e:
                     st.sidebar.error(f"❌ 저장 실패: {e}")
         else:
@@ -611,87 +650,140 @@ else:
     st.sidebar.markdown("<hr style='margin: 10px 0px;'>", unsafe_allow_html=True)
 
     # ==========================================
-    with st.sidebar.expander("⚙️ 데이터 관리 (생성 및 업로드)", expanded=False):
+    # 🌟 데이터 관리 (명단/전적 업로드)
+    # ==========================================
+    with st.sidebar.expander("⚙️ 데이터 관리 (명단/전적 업로드)", expanded=False):
 
-        # 1. 어떤 데이터를 다룰지 선택 (선수명단 or 누적전적)
-        sheet_type = st.selectbox("작업할 시트 종류", ["선수명단", "누적전적", "상대전적"], key="sheet_select")
-        template_df = get_sheet_template(sheet_type)
+        data_source = st.radio("데이터 가져오기 방식", ["☁️ 구글 시트에서 불러오기", "📁 내 기기에서 파일 업로드"])
 
-        # 파일 업로더
-        uploaded_file = st.file_uploader("CSV 파일 업로드", type=['csv'])
-        print("uploaded_file is...\n", uploaded_file)
-
-        if uploaded_file:
-            # try:
-            try:
-                raw_df = None
-                # 여러 인코딩 시도 로직
-                encodings = ['utf-8-sig', 'utf-8', 'cp949', 'euc-kr']
-
-                for enc in encodings:
-                    try:
-                        uploaded_file.seek(0)  # 각 시도마다 파일 커서 초기화
-                        raw_df = pd.read_csv(uploaded_file, encoding=enc)
-                        break  # 읽기 성공 시 루프 탈출
-                    except (UnicodeDecodeError, ValueError):
-                        continue
-
-                if raw_df is not None:
-                    # 핵심: 업로드한 파일의 컬럼이 안 맞아도 강제로 규격을 맞춰줍니다.
-                    final_df = align_columns_to_template(raw_df, template_df)
-                    print(final_df.columns)
-
-                    # 데이터 적용 버튼
-                    if st.button(f"'{sheet_type}' 데이터 확정 및 적용", type="primary", use_container_width=True):
-                        # 선택한 시트 종류에 따라 알맞은 변수에 덮어씌움
-                        if sheet_type == "선수명단":
-                            st.session_state.main_df = final_df
-                        elif sheet_type == "누적전적":
-                            st.session_state.cum_df = final_df
-                        elif sheet_type == "상대전적":
-                            st.session_state.h2h_df = final_df
-
-                        st.success(f"✅ {sheet_type} 데이터가 성공적으로 반영되었습니다.")
+        if data_source == "☁️ 구글 시트에서 불러오기":
+            st.info("클라우드에 저장된 최신 데이터를 화면으로 불러옵니다.")
+            if st.button("구글 시트 데이터 최신화", width='stretch'):
+                with st.spinner("클라우드에서 데이터를 가져오는 중..."):
+                    target_url = get_current_room_sheet_url(st.session_state.room_name)
+                    
+                    if target_url:
+                        st.session_state.main_df = conn.read(spreadsheet=target_url, worksheet="선수명단", ttl=0)
+                        st.session_state.cum_df = conn.read(spreadsheet=target_url, worksheet="누적전적", ttl=0)
+                        st.session_state.h2h_df = conn.read(spreadsheet=target_url, worksheet="상대전적", ttl=0)
+                        st.success("동기화 완료!")
                         time.sleep(1)
                         st.rerun()
-                else:
-                    st.error("파일을 읽을 수 없습니다. 인코딩 형식을 확인해주세요.")
+                    else:
+                        st.error("URL을 찾을 수 없습니다.")
 
-            except pd.errors.EmptyDataError:
-                st.error("업로드한 CSV 파일이 비어있습니다.")
-            except Exception as e:
-                st.error(f"파일 처리 중 에러 발생: {e}")
+        else:  # 📁 내 기기에서 파일 업로드
+            st.markdown("---")
+            st.markdown("**1. 양식 다운로드 및 작성**")
+            st.caption("아래 버튼을 눌러 3개의 탭이 포함된 빈 엑셀 양식을 다운로드하고, PC나 스마트폰에서 내용을 채워주세요.")
+
+            excel_data = generate_excel_template()
+            st.download_button(
+                label="📥 표준 엑셀 템플릿 다운로드",
+                data=excel_data,
+                file_name=f"{st.session_state.room_name}_데이터양식.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                width='stretch'
+            )
+
+            st.markdown("**2. 작성된 파일 업로드 (Excel 또는 CSV)**")
+            # 🌟 [수정됨] xlsx 뿐만 아니라 csv 파일도 업로드 가능하도록 허용
+            uploaded_file = st.file_uploader("파일 선택 (.xlsx, .csv)", type=['xlsx', 'xls', 'csv'])
+
+            if uploaded_file:
+                if st.button("파일 데이터 적용 및 클라우드 저장", type="primary", width='stretch'):
+                    try:
+                        with st.spinner("파일을 읽고 클라우드에 저장하는 중..."):
+                            file_ext = uploaded_file.name.split('.')[-1].lower()
+                            xls_data = {}
+
+                            # 🌟 [수정됨] CSV 파일일 경우 여러 인코딩을 순회하며 에러 없이 읽어들임
+                            if file_ext == 'csv':
+                                encodings = ['utf-8-sig', 'utf-8', 'cp949', 'euc-kr', 'latin1']
+                                df_loaded = None
+                                for enc in encodings:
+                                    try:
+                                        uploaded_file.seek(0)
+                                        df_loaded = pd.read_csv(uploaded_file, encoding=enc)
+                                        break  # 성공하면 루프 탈출
+                                    except (UnicodeDecodeError, UnicodeError):
+                                        continue
+
+                                if df_loaded is not None:
+                                    # CSV는 시트가 1개이므로, 컬럼명을 분석하여 어떤 데이터인지 유추
+                                    cols = set(df_loaded.columns)
+                                    if 'P1_Win' in cols or 'P2_Score' in cols:
+                                        xls_data["상대전적"] = df_loaded
+                                    elif '세트스코어' in cols or '승자' in cols:
+                                        xls_data["누적전적"] = df_loaded
+                                    else:
+                                        xls_data["선수명단"] = df_loaded
+                                else:
+                                    st.error("CSV 파일의 인코딩을 인식할 수 없습니다. 파일을 확인해주세요.")
+                                    st.stop()
+
+                            # 🌟 [수정됨] 엑셀 파일일 경우
+                            else:
+                                try:
+                                    uploaded_file.seek(0)
+                                    xls_data = pd.read_excel(uploaded_file, sheet_name=None)
+                                except Exception as e:
+                                    # 혹시 확장자만 .xlsx 이고 실제로는 CSV인 가짜 엑셀 파일일 경우를 대비한 방어 로직
+                                    encodings = ['utf-8-sig', 'utf-8', 'cp949', 'euc-kr']
+                                    df_loaded = None
+                                    for enc in encodings:
+                                        try:
+                                            uploaded_file.seek(0)
+                                            df_loaded = pd.read_csv(uploaded_file, encoding=enc)
+                                            break
+                                        except:
+                                            continue
+                                    if df_loaded is not None:
+                                        xls_data["선수명단"] = df_loaded
+                                    else:
+                                        st.error(f"엑셀 파일 읽기 오류: {e}")
+                                        st.stop()
+
+                            # 각 시트가 존재하면 규격을 맞춘 후 세션에 저장
+                            if "선수명단" in xls_data:
+                                st.session_state.main_df = align_columns_to_template(xls_data["선수명단"],
+                                                                                     get_sheet_template("선수명단"))
+                            if "누적전적" in xls_data:
+                                st.session_state.cum_df = align_columns_to_template(xls_data["누적전적"],
+                                                                                    get_sheet_template("누적전적"))
+                            if "상대전적" in xls_data:
+                                st.session_state.h2h_df = align_columns_to_template(xls_data["상대전적"],
+                                                                                    get_sheet_template("상대전적"))
+
+                            # 클라우드에 즉시 저장
+                            target_url = get_current_room_sheet_url(st.session_state.room_name)
+                            if target_url:
+                                conn.update(spreadsheet=target_url, worksheet="선수명단", data=st.session_state.main_df)
+                                conn.update(spreadsheet=target_url, worksheet="누적전적", data=st.session_state.cum_df)
+                                conn.update(spreadsheet=target_url, worksheet="상대전적", data=st.session_state.h2h_df)
+
+                        st.success("✅ 데이터가 성공적으로 적용되고 클라우드에 저장되었습니다!")
+                        time.sleep(1.5)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"파일 처리 중 오류 발생: {e}")
 
 # ---------------------------------------------------------
 # 3. 메인 화면 데이터 처리 (날짜 및 출석/조편성)
 # ---------------------------------------------------------
 selected_date = st.date_input("일자 선택", datetime.now(), disabled=not is_admin)
-
-# 선택된 날짜를 '2023-10-25' 같은 문자열 형태로 변환합니다.
 CURRENT_DATE = selected_date.strftime('%Y-%m-%d')
-
-# 표(데이터프레임)에 출석을 기록할 새로운 열(컬럼) 이름을 만듭니다. (예: "출석_2023-10-25")
 col_date = f"출석_{CURRENT_DATE}"
 
-print(st.session_state.main_df.columns)
-# ------------------------------------------
-# 출석 기본값 세팅 (오늘 날짜 컬럼이 없으면 새로 생성)
-# ------------------------------------------
 if col_date not in st.session_state.main_df.columns:
-    # 만약 원본 엑셀 파일에 '참석예정'이라는 열이 있다면, 그 데이터를 바탕으로 출석을 미리 체크해 줍니다.
     if '참석예정' in st.session_state.main_df.columns:
-        # apply와 lambda를 사용해 데이터 정제:
-        # 사람들이 엑셀에 'Y', 'O', '1', 'TRUE', '참석' 등 제각각으로 적어놔도 모두 'Y'로 통일해서 인식하게 만듭니다.
         st.session_state.main_df[col_date] = st.session_state.main_df['참석예정'].apply(
             lambda x: 'Y' if str(x).strip().upper() in ['Y', 'O', '1', 'TRUE', '참석'] else 'N'
         )
     else:
-        # '참석예정' 열이 아예 없다면, 일단 모든 사람을 기본적으로 참석('Y')한다고 세팅합니다.
         st.session_state.main_df[col_date] = 'Y'
 
-# 👇 [수정 부분 1] 여기에 "조편성_신청" 컬럼 확인 및 자동 생성 코드를 추가합니다. 👇
 if '조편성_신청' not in st.session_state.main_df.columns:
-    # 💡 개선 5: 함수 정의 대신 lambda를 사용하여 코드를 간결하게 만들고 속도 향상
     st.session_state.main_df['조편성_신청'] = st.session_state.main_df[col_date].apply(
         lambda x: str(random.randint(1, 4)) if x == 'Y' else ""
     )
@@ -699,14 +791,16 @@ if '조편성_신청' not in st.session_state.main_df.columns:
 tab_home, tab_config, tab_team, tab_match, tab_score, tab_help = st.tabs(
     [" 출석체크", " 운영 설정", " 조 편성 결과", " 경기 배정", " 스코어보드", "사용설명서"])
 
-# 오늘 날짜 열(col_date)에서 값이 'Y'인 사람의 수를 세어 현재 참석 인원을 계산합니다.
 attendees_count = (
         st.session_state.main_df[col_date] == 'Y').sum() if col_date in st.session_state.main_df.columns else 0
 
+# ==========================================
+# 탭 1: 출석체크 화면 구성
+# ==========================================
 with tab_home:
     responsive_text(f"📋 {CURRENT_DATE}", pc_size="20px", mobile_size="16px")
 
-    # 1. 원본 데이터 복사
+    # 원본 데이터를 건드리지 않기 위해 복사본(copy)을 만듭니다.
     df = st.session_state.main_df.copy()
 
     # 2. [에러 방지] '순서' 컬럼이 없으면 자동으로 생성
@@ -723,22 +817,22 @@ with tab_home:
 
     # 4. 화면에 보여줄 컬럼 설정 (실제 존재하는 컬럼만 선택)
     # 알려주신 컬럼명: 순서, 이름, 참석예정, 성별, 부수, 직책 등
-    display_cols = [c for c in ['순서', '이름', '참석', '부수', '직책'] if c in df.columns]
+    display_cols = [c for c in ['순서', '이름', '참석', '부수'] if c in df.columns]
 
     # 좌우 분할을 위한 인덱스 계산
     mid_idx = len(df) // 2 + (len(df) % 2)
 
-    # 화면을 5:5 비율로 나눔
+    # 화면을 정확히 5:5 비율의 두 칸(col1, col2)으로 나눕니다.
     col1, col2 = st.columns(2)
 
-    # 5. 데이터 에디터 출력
+    # st.data_editor: 엑셀처럼 화면에서 직접 데이터를 수정할 수 있게 해주는 강력한 기능입니다.
     with col1:
         edited_left = st.data_editor(
             df.iloc[:mid_idx][display_cols],
             hide_index=True,
             disabled=not is_admin,
             key="editor_left",
-            use_container_width=True
+            width='stretch'
         )
     with col2:
         edited_right = st.data_editor(
@@ -746,7 +840,7 @@ with tab_home:
             hide_index=True,
             disabled=not is_admin,
             key="editor_right",
-            use_container_width=True
+            width='stretch'
         )
 
     # 6. 수정된 데이터 합치기
@@ -754,6 +848,8 @@ with tab_home:
 
     # 7. 실시간 참석자 명단 추출 (체크된 사람만)
     current_checked = edited_df[edited_df['참석'] == True]
+
+    # 참석자들의 이름을 가나다순으로 정렬한 뒤, 쉼표(,)로 연결하여 한 줄의 문장으로 만듭니다.
     live_names = ", ".join(sorted(current_checked['이름'].tolist()))
 
     # 안내창 표시
@@ -764,14 +860,13 @@ with tab_home:
         btn_label = "확정 완료 (참석자 저장됨)" if st.session_state.attendance_confirmed else "참석자 확정하기"
         btn_type = "primary" if st.session_state.attendance_confirmed else "secondary"
 
-        if st.button(btn_label, type=btn_type, use_container_width=True):
+        # 확정 버튼을 눌렀을 때 실행되는 부분
+        if st.button(btn_label, type=btn_type, width='stretch'):
             # 화면의 체크 상태(True/False)를 원본 데이터 형식('Y'/'N')으로 변환하여 저장
             # 오늘 날짜 컬럼(col_date)에 저장합니다.
             st.session_state.main_df[col_date] = edited_df['참석'].apply(lambda x: 'Y' if x else 'N')
 
             # (선택사항) '참석예정' 컬럼도 동기화하고 싶다면 아래 주석 해제
-            # st.session_state.main_df['참석예정'] = st.session_state.main_df[col_date]
-
             st.session_state.attendance_confirmed = True
             st.success("✅ 오늘의 참석자 명단이 시스템에 기록되었습니다.")
             time.sleep(1)
@@ -779,8 +874,7 @@ with tab_home:
 
         st.divider()
         responsive_text(f"💾 최신 명단 다운로드", pc_size="20px", mobile_size="16px")
-
-        # CSV 다운로드 (한글 깨짐 방지 utf-8-sig)
+        # 현재까지의 모든 데이터(출석 기록 포함)를 CSV 파일 형태로 변환합니다. (한글 깨짐 방지 utf-8-sig)
         csv_main = st.session_state.main_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
         st.download_button(
             label="📥 최신 명단(CSV) 다운로드",
@@ -788,9 +882,12 @@ with tab_home:
             file_name=f"{room_name}_최신명단_{CURRENT_DATE}.csv",
             mime="text/csv",
             type="primary",
-            use_container_width=True
+            width='stretch'
         )
 
+# ==========================================
+# 탭 2: 운영 설정
+# ==========================================
 with tab_config:
     # 출석체크 탭에서 계산된 총 참석 인원을 파란색 정보창으로 띄워줍니다.
     st.info(f"👥 현재 확정된 참석 인원: **{attendees_count}명** \n\n {live_names}")
@@ -800,7 +897,6 @@ with tab_config:
     c1, c2, c3, c4, c5 = st.columns([1.2, 1.2, 1.2, 1.2, 1.5])
 
     with c1:
-        # st.markdown(f"#### 👥 조 구성")
         responsive_text(f"👥 조 구성", pc_size="20px", mobile_size="16px")
         # 숫자 입력 위젯 (기본값 4조, 1\~20조까지 설정 가능)
         g_val = st.number_input("편성 조 수", 1, 20, 4, disabled=not is_admin)
@@ -816,35 +912,30 @@ with tab_config:
                 st.info(f"👉 조당 {avg}명 배정")
 
     with c2:
-        # st.markdown("#### 🎾 경기 규칙")
         responsive_text(f"🎾 경기 규칙", pc_size="20px", mobile_size="16px")
         s_g = st.number_input("단식 게임", 0, 10, 2, disabled=not is_admin)
         d_g = st.number_input("복식 게임", 0, 5, 1, disabled=not is_admin)
         set_c = st.selectbox("개인전 선승 세트", [2, 3, 4, 5], index=1, disabled=not is_admin)
 
     with c3:
-        # st.markdown("#### ⚙️ 환경 설정")
         responsive_text(f"⚙️ 환경 설정", pc_size="20px", mobile_size="16px")
         t_val = st.number_input("Table_No.", 1, 20, 3, disabled=not is_admin)
 
     with c4:
-        # st.markdown("#### 🎲 방식")
         responsive_text(f"🎲 방식", pc_size="20px", mobile_size="16px")
         # 라디오 버튼으로 둘 중 하나를 선택하게 합니다.
         draw_method = st.radio("방식", ["AI 선정", "제비뽑기", "조편성_신청"], label_visibility="collapsed", disabled=not is_admin)
 
     with c5:
-        # st.markdown("#### ✅ 실행")
         responsive_text(f"✅ 실행", pc_size="20px", mobile_size="16px")
         if is_admin:
             btn_label = "설정 확정 완료" if st.session_state.config_confirmed else "설정 확정 및 편성 시작"
             btn_type = "primary" if st.session_state.config_confirmed else "secondary"
 
-            if st.button(btn_label, type=btn_type, use_container_width=True):
+            if st.button(btn_label, type=btn_type, width='stretch'):
                 # 위에서 설정한 모든 값들을 'config'라는 하나의 딕셔너리(보따리)에 담아 세션에 저장합니다.
                 st.session_state.config = {
                     "g": g_val, "t": t_val, "s_games": s_g, "d_games": d_g, "set_count": set_c,
-                    # "total_g": s_g + d_g, "draw_method": draw_method, "selected_adj": selected_adj,
                     "total_g": s_g + d_g, "draw_method": draw_method,
                     # 동점자 처리를 위해 모든 사람에게 0\~1 사이의 랜덤 숫자를 미리 부여해 둡니다.
                     "tie_breakers": {name: random.random() for name in st.session_state.main_df['이름']}
@@ -854,7 +945,7 @@ with tab_config:
         else:
             st.info("관리자 전용")
 
-    st.markdown('</div>', unsafe_allow_html=True)  # CSS div 태그 닫기
+    st.markdown('</div>', unsafe_allow_html=True)
 
     if "config" in st.session_state and st.session_state.config.get('draw_method') == '제비뽑기':
 
@@ -862,7 +953,6 @@ with tab_config:
         if not st.session_state.get('draw_completed', False):
             st.divider()
             cfg = st.session_state.config
-            # adj_col = cfg['selected_adj']
             df = st.session_state.main_df
 
             # 참석자 명단만 추려냅니다.
@@ -873,7 +963,6 @@ with tab_config:
             attendees['Random'] = attendees['이름'].map(cfg['tie_breakers'])
 
             # 💡 핵심: 실력이 비슷한 사람끼리 묶기 위해 부수 -> 조정부수 -> 랜덤 순으로 줄을 세웁니다.
-            # sorted_members = attendees.sort_values(['부수_숫자', adj_col, 'Random'], ascending=True).reset_index(drop=True)
             sorted_members = attendees.sort_values(['부수_숫자', 'Random'], ascending=True).reset_index(drop=True)
 
             # 총 몇 개의 실력 그룹(레벨)이 나오는지 계산합니다. (예: 16명이고 4조면 4개의 그룹)
@@ -893,7 +982,6 @@ with tab_config:
                 current_group = sorted_members.iloc[start_idx:end_idx]
                 group_members = current_group['이름'].tolist()
 
-                # st.markdown(f"#### 그룹 {level + 1}")
                 responsive_text(f"📋 그룹 {level + 1}", pc_size="20px", mobile_size="16px")
                 cols = st.columns(cfg['g'])  # 조 개수만큼 화면을 가로로 나눕니다.
 
@@ -903,7 +991,7 @@ with tab_config:
                         with cols[i % cfg['g']]:
                             # 배정된 조를 가져와서 초록색 성공 창으로 보여줍니다.
                             assigned_team = st.session_state.draw_results.get(row['이름'], "-")
-                            st.success(f" <strong>{row['이름']}</strong> ➔ **{assigned_team}조**")
+                            st.success(f" **{row['이름']}** ➔ **{assigned_team}조**")
 
                 # [상태 2] 현재 제비뽑기를 진행 중인 그룹 (가장 중요!)
                 elif level == draw_level:
@@ -915,7 +1003,6 @@ with tab_config:
                         st.session_state[state_key] = {name: available_options[i] for i, name in
                                                        enumerate(group_members)}
                         st.session_state[f"{state_key}_prev"] = st.session_state[state_key].copy()
-
 
                     # 💡 중복 선택 방지 콜백 함수 (누군가 조를 바꾸면, 원래 그 조를 갖고 있던 사람과 맞바꿈)
                     def on_selection_change(changed_member, lvl):
@@ -935,7 +1022,6 @@ with tab_config:
                                     break
                             current_selections[changed_member] = new_val
                             st.session_state[f"{s_key}_prev"] = current_selections.copy()
-
 
                     # 현재 그룹 사람들의 드롭다운(선택창)을 그립니다.
                     for i, (idx, row) in enumerate(current_group.iterrows()):
@@ -966,7 +1052,7 @@ with tab_config:
                             if st.button(f" 그룹 {level + 1} 제비뽑기 완료 및 다음 진행", type="primary", width="stretch"):
                                 for name in group_members:
                                     st.session_state.draw_results[name] = st.session_state[f"select_{level}_{name}"]
-                                st.session_state.draw_level += 1  # 다음 그룹으로 넘어감
+                                st.session_state.draw_level += 1
                                 st.rerun()
 
                 # [상태 3] 아직 차례가 오지 않은 미래의 대기 그룹들
@@ -1092,18 +1178,25 @@ with tab_team:
             st.session_state.ind_matrix = pd.DataFrame(0.0, index=all_member_names, columns=all_member_names)
             for m in all_member_names: st.session_state.ind_matrix.loc[m, m] = np.nan
 
+# ==========================================
+# 탭 4: 경기 배정 및 점수 입력
+# ==========================================
 with tab_match:
     # 조 편성이 완료되어 세션에 'labels'(조 이름 목록)와 'matrix'(점수판)가 존재할 때만 실행
     if 'labels' in st.session_state and st.session_state.get('matrix') is not None:
 
         def get_matches(teams):
             t_list = list(teams)
+            # 팀이 홀수면 짝을 맞추기 위해 가상의 '부전승(None)' 팀을 추가합니다.
             if len(t_list) % 2: t_list.append(None)
             res = []
+            # 총 라운드 수는 (팀 수 - 1) 입니다.
             for _ in range(len(t_list) - 1):
+                # 리스트의 양 끝에서부터 안쪽으로 짝을 지어줍니다. (예: 1번-6번, 2번-5번, 3번-4번)
                 for j in range(len(t_list) // 2):
                     if t_list[j] and t_list[-1 - j]:
                         res.append((t_list[j], t_list[-1 - j]))
+                # 💡 핵심: 첫 번째 팀은 가만히 두고, 나머지 팀들만 시계 방향으로 한 칸씩 회전시킵니다.
                 t_list = [t_list[0]] + [t_list[-1]] + t_list[1:-1]
             return res
 
@@ -1112,10 +1205,11 @@ with tab_match:
 
         # 설정값(config) 불러오기
         cfg = st.session_state.config
-        t_count = cfg['t']
-        s_games = cfg.get('s_games', 0)
-        d_games = cfg.get('d_games', 0)
-        is_ind = cfg.get('is_individual', False)
+        t_count = cfg['t']  # 탁구대 개수
+        s_games = cfg.get('s_games', 0)  # 단식 경기 수
+        d_games = cfg.get('d_games', 0)  # 복식 경기 수
+        is_ind = cfg.get('is_individual', False)  # 개인전 여부
+        # 개인전이면 세트 수(예: 3판 2선승), 단체전이면 총 경기 수(단식+복식)를 최대 점수로 설정
         limit = cfg.get('set_count', 3) if is_ind else cfg.get('total_g', 5)
         match_info = "개인전" if is_ind else f"단식 {s_games} / 복식 {d_games}"
 
@@ -1123,13 +1217,16 @@ with tab_match:
         m_data = []
         for i, (a, b) in enumerate(all_matches):
             s1, s2 = 0, 0
+            # 점수판(matrix)에 이미 입력된 점수가 있는지 확인
             if a in st.session_state.matrix.index and b in st.session_state.matrix.columns:
                 s1, s2 = st.session_state.matrix.loc[a, b], st.session_state.matrix.loc[b, a]
 
+            # 점수가 1점이라도 입력되어 있으면 '종료', 아니면 '대기' 상태로 표시
             status = " 종료" if (not np.isnan(s1) and (s1 + s2 > 0)) else " 대기"
+
             m_data.append({
                 "순서": i + 1,
-                "Table_No": f"{(i % t_count) + 1}번 대",
+                "Table_No": f"{(i % t_count) + 1}번 대",  # 탁구대 번호를 순서대로 배정 (1번->2번->3번->1번...)
                 "상태": status,
                 "대진": f"{a} VS {b}",
                 "경기 구성": match_info,
@@ -1138,31 +1235,40 @@ with tab_match:
 
         df_match = pd.DataFrame(m_data)
 
-
+        # 종료된 경기는 표에서 회색으로 흐리게 보이도록 만드는 스타일 함수
         def highlight_finished(row):
             if row['상태'] == ' 종료': return ['background-color: rgba(128, 128, 128, 0.15); color: gray;'] * len(row)
             return [''] * len(row)
 
-
+        # 대진표가 길어질 수 있으므로 좌/우 두 개의 표로 나눕니다.
         mid_idx = (len(df_match) + 1) // 2
         df_left = df_match.iloc[:mid_idx].reset_index(drop=True)
         df_right = df_match.iloc[mid_idx:].reset_index(drop=True)
 
         col_title, col_info = st.columns([3, 7])
         with col_title:
+            # st.markdown("### 경기 배정표")
             responsive_text(f"📋 경기 배정표", pc_size="20px", mobile_size="16px")
         with col_info:
             st.info(" **행을 클릭**하면 상세 결과 입력창이 나타납니다.")
 
         col1, col2 = st.columns(2)
         with col1:
-            event_left = st.dataframe(df_left.style.apply(highlight_finished, axis=1), width="stretch", hide_index=True,
-                                      on_select="rerun", selection_mode="single-row")
+            # on_select="rerun": 표의 특정 줄을 클릭하면 화면이 새로고침되면서 클릭한 정보를 가져옵니다.
+            event_left = st.dataframe(df_left.style.apply(highlight_finished, axis=1),
+                                      width="stretch",
+                                      hide_index=True,
+                                      on_select="rerun",
+                                      selection_mode="single-row"
+                                      )
         with col2:
-            event_right = st.dataframe(df_right.style.apply(highlight_finished, axis=1), width="stretch",
-                                       hide_index=True, on_select="rerun",
+            event_right = st.dataframe(df_right.style.apply(highlight_finished, axis=1),
+                                       width="stretch",
+                                       hide_index=True,
+                                       on_select="rerun",
                                        selection_mode="single-row") if not df_right.empty else None
 
+        # 사용자가 왼쪽 표를 클릭했는지, 오른쪽 표를 클릭했는지 파악하여 해당 경기의 인덱스(번호)를 찾습니다.
         selected_match_idx = None
         if event_left and event_left.selection.rows:
             selected_match_idx = event_left.selection.rows[0]
@@ -1172,31 +1278,39 @@ with tab_match:
         if selected_match_idx is not None:
             team_a, team_b = all_matches[selected_match_idx]
             st.divider()
+            # st.markdown(f"### 🎯 {team_a} VS {team_b} 상세 결과 입력")
             responsive_text(f"🎯 {team_a} VS {team_b} 상세 결과 입력", pc_size="20px", mobile_size="16px")
 
             if not is_admin:
                 st.warning("🔒 관리자 비밀번호를 입력해주세요.")
             else:
+                # [A] 개인전일 경우의 점수 입력 UI (간단함)
                 if is_ind:
                     # [A] 개인전 로직 (생략 없이 유지)
                     m_idx = selected_match_idx
                     c1, c2, c3, c4, c5 = st.columns([1.5, 1.5, 2.5, 1.5, 1.5])
                     with c1:
                         st.markdown(f"<div style='text-align:center;'>{team_a}</div>", unsafe_allow_html=True)
+
                     with c2:
                         res_type = st.radio(f"결과", ["승", "패"], horizontal=True, key=f"m{m_idx}_ind_res")
+
                     with c3:
                         scores = [f"{limit}:{i}" for i in range(limit)] if res_type == "승" else [f"{i}:{limit}" for i in
                                                                                                  range(limit)]
                         selected_score = st.radio("스코어", scores, horizontal=True, key=f"m{m_idx}_ind_score")
+
                     with c4:
                         st.markdown(f"<div style='text-align:center;'>{team_b}</div>", unsafe_allow_html=True)
+
                     with c5:
                         if st.button("결과 저장", type="primary", key=f"btn_save_ind_{m_idx}"):
                             s_a, s_b = map(int, selected_score.split(':'))
                             st.session_state.matrix.loc[team_a, team_b] = s_a
                             st.session_state.matrix.loc[team_b, team_a] = s_b
                             st.rerun()
+
+                # [B] 단체전(조별 리그)일 경우의 점수 입력 UI (단식/복식 각각 입력)
                 else:
                     # [B] 단체전 로직 (단식/복식 인원 분리 핵심)
                     def get_team_players(team_str):
@@ -1211,7 +1325,6 @@ with tab_match:
                     team_b_players = get_team_players(team_b)
                     m_idx = selected_match_idx
 
-
                     # 💡 핵심: 단식용 가용 인원 체크 (단식 선수들끼리만 중복 제거)
                     def get_avail_single(players, current_key):
                         selected = [st.session_state[f"m{m_idx}_s_p{ab}_{s}"]
@@ -1220,7 +1333,6 @@ with tab_match:
                                     and f"m{m_idx}_s_p{ab}_{s}" != current_key
                                     and st.session_state[f"m{m_idx}_s_p{ab}_{s}"] != "선택안함"]
                         return ["선택안함"] + [p for p in players if p not in selected]
-
 
                     # 💡 핵심: 복식용 가용 인원 체크 (단식 인원은 포함시키고, 복식 내부 인원만 중복 제거)
                     def get_avail_double(players, current_key):
@@ -1243,15 +1355,20 @@ with tab_match:
                         for s in range(s_games):
                             c1, c2, c3, c4, c5 = st.columns([1, 2.5, 1.5, 2.5, 2.5])
                             ka, kb = f"m{m_idx}_s_pa_{s}", f"m{m_idx}_s_pb_{s}"
+
                             with c1: st.write(f"단식 {s + 1}")
+
                             with c2: p_a = st.selectbox(f"A팀", get_avail_single(team_a_players, ka), key=ka,
                                                         label_visibility="collapsed")
+
                             with c3: res = st.radio("결과", ["승", "패"], horizontal=True, key=f"m{m_idx}_s_res_{s}",
                                                     label_visibility="collapsed")
+
                             with c4:
                                 sc = st.radio("점수", set_win_scores if res == "승" else set_lose_scores, horizontal=True,
                                               key=f"m{m_idx}_s_sc_{s}", label_visibility="collapsed")
                                 s_a, s_b = map(int, sc.split(':'))
+
                             with c5: p_b = st.selectbox(f"B팀", get_avail_single(team_b_players, kb), key=kb,
                                                         label_visibility="collapsed")
                             match_results.append(("S", p_a, s_a, s_b, p_b))
@@ -1260,24 +1377,29 @@ with tab_match:
 
                     # --- 복식 경기 섹션 ---
                     if d_games > 0:
-                        st.markdown("#### 👥 복식 경기")
+                        # st.markdown("##### 👥 복식 경기")
+                        responsive_text(f"👥 복식 경기", pc_size="20px", mobile_size="16px")
                         for d in range(d_games):
                             c1, c2, c3, c4, c5 = st.columns([1, 2.5, 1.5, 2.5, 2.5])
                             ka1, ka2 = f"m{m_idx}_d_pa1_{d}", f"m{m_idx}_d_pa2_{d}"
                             kb1, kb2 = f"m{m_idx}_d_pb1_{d}", f"m{m_idx}_d_pb2_{d}"
 
                             with c1: st.write(f"복식 {d + 1}")
+
                             with c2:
                                 p_a1 = st.selectbox(f"A1", get_avail_double(team_a_players, ka1), key=ka1,
                                                     label_visibility="collapsed")
                                 p_a2 = st.selectbox(f"A2", get_avail_double(team_a_players, ka2), key=ka2,
                                                     label_visibility="collapsed")
+
                             with c3: res = st.radio("결과", ["승", "패"], horizontal=True, key=f"m{m_idx}_d_res_{d}",
                                                     label_visibility="collapsed")
+
                             with c4:
                                 sc = st.radio("점수", set_win_scores if res == "승" else set_lose_scores, horizontal=True,
                                               key=f"m{m_idx}_d_sc_{d}", label_visibility="collapsed")
                                 s_a, s_b = map(int, sc.split(':'))
+
                             with c5:
                                 p_b1 = st.selectbox(f"B1", get_avail_double(team_b_players, kb1), key=kb1,
                                                     label_visibility="collapsed")
@@ -1285,7 +1407,7 @@ with tab_match:
                                                     label_visibility="collapsed")
                             match_results.append(("D", (p_a1, p_a2), s_a, s_b, (p_b1, p_b2)))
 
-                    if st.button("💾 상세 결과 저장", type="primary", use_container_width=True):
+                    if st.button("💾 상세 결과 저장", type="primary", width='stretch'):
                         aw, bw = 0, 0
                         for res in match_results:
                             if res[0] == "S":
@@ -1312,6 +1434,9 @@ with tab_match:
     else:
         st.info("조 편성이 완료되면 경기 배정표가 나타납니다.")
 
+# ==========================================
+# 탭 5: 스코어보드
+# ==========================================
 with tab_score:
     # 조 편성이 완료되어 세션에 'labels'(조 이름)와 'matrix'(점수판)가 있을 때만 실행
     if 'labels' in st.session_state and st.session_state.get('matrix') is not None:
@@ -1325,7 +1450,7 @@ with tab_score:
             st.session_state.table_font_size = 20 if num_rows <= 4 else (
                 16 if num_rows <= 6 else (13 if num_rows <= 8 else 11))
 
-        # 전체 화면 모드 여부를 기억하는 변수
+        # 전체 화면 모드 여부를 기억하는 변수 (기본값: False)
         if 'fullscreen_table' not in st.session_state:
             st.session_state.fullscreen_table = False
 
@@ -1355,17 +1480,21 @@ with tab_score:
 
             # 5. 결과 합치기 및 정렬
             combined_df = pd.concat([m, rank[['승', '패', '득점', '실점', '득실차']]], axis=1)
+
+            # 1순위: 승수가 많은 순, 2순위: 득실차가 높은 순으로 표를 정렬(순위 매기기)합니다.
             combined_df = combined_df.sort_values(['승', '득실차'], ascending=False)
 
-            # 6. 스타일 및 HTML 렌더링
+            # 현재 설정된 글자 크기에 맞춰 표의 행 높이(ROW_HEIGHT)를 계산합니다.
             current_fs = st.session_state.table_font_size
             ROW_HEIGHT = f"{current_fs + 25}px"
 
+            # Pandas Styler를 이용해 표의 디자인(가운데 정렬, 높이 등)을 세밀하게 설정합니다.
             styled_df = combined_df.style.format(precision=0, na_rep='-').set_properties(**{
                 'text-align': 'center', 'vertical-align': 'middle', 'height': ROW_HEIGHT,
             }).set_table_styles([{'selector': 'th', 'props': [('text-align', 'center'), ('vertical-align', 'middle'),
                                                               ('height', ROW_HEIGHT)]}])
 
+            # 💡 Streamlit 기본 표 대신, HTML과 CSS를 직접 주입하여 '진짜 전광판'처럼 꽉 차게 만듭니다.
             raw_html = styled_df.to_html().replace('\n', '')
             css = f"""
             <style>
@@ -1378,7 +1507,6 @@ with tab_score:
             """
             st.markdown(css + '<div class="custom-table-wrapper">' + raw_html + '</div>', unsafe_allow_html=True)
 
-
         # --- 상단 제어 바 ---
         col_ctrl1, col_ctrl2, col_ctrl3, col_ctrl4 = st.columns([4, 2, 2, 2])
 
@@ -1388,7 +1516,7 @@ with tab_score:
                 st.session_state.fullscreen_table = not st.session_state.fullscreen_table
                 st.rerun()
 
-        with col_ctrl2:
+        with col_ctrl2:  # 글자 크기 조절 버튼 (+ / -)
             f_col1, f_col2, f_col3 = st.columns([1, 1.5, 1])
             with f_col1:
                 if st.button("➖"): st.session_state.table_font_size = max(8,
@@ -1401,17 +1529,21 @@ with tab_score:
                 if st.button("➕"): st.session_state.table_font_size = min(30,
                                                                           st.session_state.table_font_size + 1); st.rerun()
 
-        with col_ctrl3:
+        with col_ctrl3:  # 누적 결과 다운로드
             if 'cum_df' in st.session_state and not st.session_state.cum_df.empty:
                 csv_bytes = st.session_state.cum_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
                 st.download_button(label="📥 누적 다운로드", data=csv_bytes, file_name=f"{room_name}_누적.csv", mime="text/csv",
                                    width='stretch')
 
-        with col_ctrl4:
+        with col_ctrl4:  # 상대 전적 다운로드
             if 'h2h_df' in st.session_state and not st.session_state.h2h_df.empty:
                 h2h_bytes = st.session_state.h2h_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
-                st.download_button(label="📥 상대전적 다운로드", data=h2h_bytes, file_name=f"{room_name}_상전.csv",
-                                   mime="text/csv", width='stretch')
+                st.download_button(label="📥 상대전적 다운로드",
+                                   data=h2h_bytes,
+                                   file_name=f"{room_name}_상전.csv",
+                                   mime="text/csv",
+                                   width='stretch'
+                                   )
 
         if st.session_state.fullscreen_table:
             responsive_text(f"🏆 종합 결과 전광판", pc_size="24px", mobile_size="18px")
@@ -1422,6 +1554,7 @@ with tab_score:
             if not is_admin:
                 st.warning("🔒 관리자만 입력 가능합니다.")
             else:
+                st.info(" 기준이 되는 조(선수)를 선택하고 승/패 및 스코어를 입력하세요. (이미 완료된 경기는 비활성화됩니다.)")
                 labels = st.session_state.labels
                 limit = cfg.get('set_count', 3) if is_ind else cfg.get('total_g', 5)
                 if labels:
@@ -1444,9 +1577,9 @@ with tab_score:
                             except:
                                 return n
 
+
                         team_b = st.selectbox("B 선수", [l for l in labels if l != team_a], format_func=f_b, key="sb_b")
 
-                        # is_done = not np.isnan(st.session_state.matrix.loc[team_a, team_b])
                         # --- 수정 후 (안전한 버전) ---
                         is_done = False  # 기본값 설정
 
