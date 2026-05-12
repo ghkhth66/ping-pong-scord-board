@@ -203,9 +203,6 @@ ROOM_STATES_FILE = "room_states.json"  # 🌟 [추가] 진행 중인 방 상태�
 
 def save_room_state(room_name):
     """🌟 [추가] 현재 방의 진행 상황(세션)을 JSON 파일에 임시 저장합니다."""
-    # import os, json
-    # from io import StringIO
-
     if os.path.exists(ROOM_STATES_FILE):
         with open(ROOM_STATES_FILE, "r", encoding="utf-8") as f:
             try: data = json.load(f)
@@ -217,7 +214,8 @@ def save_room_state(room_name):
     room_data = {
         "config_confirmed": st.session_state.get("config_confirmed", False),
         "attendance_confirmed": st.session_state.get("attendance_confirmed", False),
-
+        # 🌟 [추가] 현재 몇 차전인지도 저장합니다.
+        "game_round": st.session_state.get("game_round", 1),
         "config": st.session_state.get("config", {}),
         "labels": st.session_state.get("labels", []),
         "teams": st.session_state.get("teams", {}),
@@ -234,9 +232,6 @@ def save_room_state(room_name):
 
 def load_room_state(room_name):
     """🌟 [추가] 방 이름으로 저장된 진행 상황을 불러와 세션에 복구합니다."""
-    # import os, json, pandas as pd
-    # from io import StringIO
-
     if not os.path.exists(ROOM_STATES_FILE): return False
 
     with open(ROOM_STATES_FILE, "r", encoding="utf-8") as f:
@@ -247,6 +242,9 @@ def load_room_state(room_name):
         room_data = data[room_name]
         st.session_state.config_confirmed = room_data.get("config_confirmed", False)
         st.session_state.attendance_confirmed = room_data.get("attendance_confirmed", False)
+        # 🌟 [추가] 저장된 회차를 불러옵니다. 없으면 1차전으로 세팅.
+        st.session_state.game_round = room_data.get("game_round", 1)
+
         if room_data.get("config"):
             st.session_state.config = room_data["config"]
 
@@ -276,10 +274,6 @@ def load_room_state(room_name):
 
 def save_league_history(key_name, labels, matrix_df, ind_matrix_df, config):
     """현재 리그 데이터를 로컬 JSON 파일에 저장합니다."""
-    # import os
-    # import json
-    # from io import StringIO  # 💡 [변경] 함수 내부에서 직접 임포트하여 오류 원천 차단!
-
     # 기존 저장된 데이터 로드
     if os.path.exists(HISTORY_FILE):
         with open(HISTORY_FILE, "r", encoding="utf-8") as f:
@@ -302,12 +296,8 @@ def save_league_history(key_name, labels, matrix_df, ind_matrix_df, config):
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
-
 def get_history_keys():
     """저장된 전체 리그 목록을 가져옵니다."""
-    # import os
-    # import json
-
     if not os.path.exists(HISTORY_FILE):
         return []
     with open(HISTORY_FILE, "r", encoding="utf-8") as f:
@@ -342,7 +332,6 @@ def load_league_history(key_name):
 
 # 4. 핵심 비즈니스 로직 (Core Business Logic)
 # 경기 결과를 바탕으로 전적을 계산하고 업데이트하는 핵심 로직입니다.
-
 def update_cumulative_record(p_a, p_b, s_a, s_b):
     """경기가 끝날 때마다 선수들의 누적 전적과 상대 전적을 업데이트하는 함수"""
 
@@ -428,6 +417,10 @@ def update_cumulative_record(p_a, p_b, s_a, s_b):
 
 # 5. UI 및 화면 출력 함수 (UI & Display)
 # 화면에 텍스트를 그리거나 팝업(Dialog)을 띄우는 함수들입니다.
+# UI 간격 조절용 헬퍼 함수 (원하는 픽셀만큼 띄울 수 있음)
+def v_space(height):
+    """수직 여백(간격)을 추가하는 함수. 기본값 10px"""
+    st.markdown(f"<div style='height: {height}px;'></div>", unsafe_allow_html=True)
 
 def responsive_text(text, pc_size="28px", mobile_size="18px", font_weight="bold", color="inherit"):
     """PC와 모바일에서 글자 크기가 자동으로 변하는 텍스트를 출력하는 함수"""
@@ -486,6 +479,11 @@ if 'is_admin' not in st.session_state:
     st.session_state.is_admin = False
 if 'room_name' not in st.session_state:
     st.session_state.room_name = "생활_탁구장"
+
+# 🌟 [여기에 추가하세요!]
+if 'game_round' not in st.session_state:
+    st.session_state.game_round = 1
+
 if 'main_df' not in st.session_state:
     st.session_state.main_df = get_sheet_template("선수명단")
 if 'cum_df' not in st.session_state:
@@ -525,7 +523,6 @@ if not is_admin:
 
             login_room_name = st.selectbox("구장명 (방 이름) 선택", options=room_list, index=default_index)
             admin_password = st.text_input("관리자 비밀번호 (조회 시 생략 가능)", type="password")
-
             submit_login = st.form_submit_button("로그인", width='stretch')
 
         if submit_login:
@@ -548,10 +545,6 @@ if not is_admin:
             if is_valid_admin or not admin_password:
                 if is_valid_admin:
                     st.session_state.is_admin = True
-
-                # # 🌟 [추가된 부분] 새 방에 들어가기 전에 기존 세션 찌꺼기 완벽 초기화
-                # keys_to_clear_tab_login = ['config', 'config_confirmed', 'attendance_confirmed', 'labels', 'teams',
-                #                  'draw_results', 'draw_completed', 'draw_level', 'matrix', 'ind_matrix']
 
                 for k in config.keys_to_clear_tab_login:
                     if k in st.session_state:
@@ -720,11 +713,6 @@ else:
     st.sidebar.success("👑 관리자 모드로 접속 중입니다.")
 
     if st.sidebar.button("🔒 로그아웃", width='stretch'):
-        # 🌟 [추가된 부분] 로그아웃 시 현재 방의 임시 데이터를 모두 삭제하여 다른 방에 영향 주지 않기
-        # keys_to_clear_is_admin = ['config', 'config_confirmed', 'attendance_confirmed', 'labels', 'teams',
-        #                  'draw_results', 'draw_completed', 'draw_level', 'matrix', 'ind_matrix',
-        #                  'main_df', 'cum_df', 'h2h_df']
-
         for k in config.keys_to_clear_is_admin:
             if k in st.session_state:
                 del st.session_state[k]
@@ -770,55 +758,57 @@ else:
         st.warning("⚠️ 현재 진행 중인 경기 결과(조 편성, 점수판 등)가 모두 초기화됩니다. \n\n(단, 누적 전적과 선수 명단 DB는 유지됩니다.)")
 
         if st.button("🆕 새 경기 시작하기", type="primary", width='stretch'):
-            # 1. 현재 경기의 진행 상태와 관련된 세션 변수들만 골라서 삭제합니다.
-            # keys_to_reset = [
-            #     'config_confirmed', 'attendance_confirmed', 'labels', 'teams',
-            #     'draw_results', 'draw_completed', 'draw_level', 'matrix', 'ind_matrix',
-            #     'main_matrix_editor', 'ind_matrix_editor'
-            # ]
-            for k in config.keys_to_reset:
-                if k in st.session_state:
-                    del st.session_state[k]
+            with st.spinner("기존 데이터를 초기화하고 최신 명단을 불러오는 중..."):
+                for k in config.keys_to_reset:
+                    if k in st.session_state:
+                        del st.session_state[k]
 
-            # 2. 제비뽑기 진행 중 생성된 임시 변수들도 모두 삭제합니다.
-            for key in list(st.session_state.keys()):
-                if key.startswith("group_selections_") or key.startswith("select_") or key.startswith("m"):
-                    del st.session_state[key]
+                # 2. 제비뽑기 진행 중 생성된 임시 변수들도 모두 삭제합니다.
+                for key in list(st.session_state.keys()):
+                    if key.startswith("group_selections_") or key.startswith("select_") or key.startswith("m"):
+                        del st.session_state[key]
 
-            # 3. 초기화된 상태를 파일에 덮어써서 저장합니다.
-            save_room_state(st.session_state.room_name)
+                # 🌟 [핵심 추가] 3. 다음 회차로 넘어가기 (1차전 -> 2차전)
+                st.session_state.game_round += 1
 
-            st.sidebar.success("✨ 초기화 완료! 새로운 경기를 세팅해 주세요.")
-            time.sleep(1)
-            st.rerun()
+                # 🌟 [추가된 핵심 로직] 3. 구글 시트에서 최신 DB(선수명단, 전적) 다시 불러오기
+                target_url = get_current_room_sheet_url(st.session_state.room_name)
+
+                if target_url:
+                    try:
+                        st.session_state.main_df = conn.read(spreadsheet=target_url, worksheet="선수명단", ttl=0)
+                        st.session_state.cum_df = conn.read(spreadsheet=target_url, worksheet="누적전적", ttl=0)
+                        st.session_state.h2h_df = conn.read(spreadsheet=target_url, worksheet="상대전적", ttl=0)
+                        st.toast("✅ 최신 구글 시트 데이터를 성공적으로 불러왔습니다!", icon="🔄")
+                    except Exception as e:
+                        st.error(f"구글 시트 데이터를 불러오는 중 오류가 발생했습니다: {e}")
+                else:
+                    st.toast("⚠️ 연결된 구글 시트 URL이 없어 기존 로컬 명단이 유지됩니다.", icon="⚠️")
+
+                # 3. 초기화된 상태를 파일에 덮어써서 저장합니다.
+                save_room_state(st.session_state.room_name)
+
+                # 알림 메시지에 몇 차전인지 표시
+                st.sidebar.success(f"✨ 초기화 완료! {st.session_state.game_round}차전 세팅을 진행해 주세요.")
+                time.sleep(1)
+                st.rerun()
 
     st.sidebar.markdown("<hr style='margin: 10px 0px;'>", unsafe_allow_html=True)
 
     # ==========================================
     # 🌟 데이터 관리 (명단/전적 업로드)
     # ==========================================
-    with st.sidebar.expander("⚙️ 데이터 관리 (명단/전적 업로드)", expanded=False):
+    with st.sidebar.expander("⚙️ 데이터 관리", expanded=False):
+        # 🌟 [핵심 수정 포인트] 현재 선수명단에 데이터가 있는지 확인 (초기 세팅 여부 자동 판단)
+        # 데이터가 없거나 비어있으면 True (최초 상태)
+        is_initial_setup = st.session_state.main_df.empty or len(st.session_state.main_df) == 0
 
-        data_source = st.radio("데이터 가져오기 방식", ["☁️ 구글 시트에서 불러오기", "📁 내 기기에서 파일 업로드"])
+        if is_initial_setup:
+            # ---------------------------------------------------
+            # [최초 세팅] 데이터가 없을 때만 파일 업로드 화면 표시
+            # ---------------------------------------------------
+            st.warning("⚠️ 현재 등록된 선수 데이터가 없습니다.\n최초 1회 파일을 업로드하여 구장을 세팅해주세요.")
 
-        if data_source == "☁️ 구글 시트에서 불러오기":
-            st.info("클라우드에 저장된 최신 데이터를 화면으로 불러옵니다.")
-            if st.button("구글 시트 데이터 최신화", width='stretch'):
-                with st.spinner("클라우드에서 데이터를 가져오는 중..."):
-                    target_url = get_current_room_sheet_url(st.session_state.room_name)
-                    
-                    if target_url:
-                        st.session_state.main_df = conn.read(spreadsheet=target_url, worksheet="선수명단", ttl=0)
-                        st.session_state.cum_df = conn.read(spreadsheet=target_url, worksheet="누적전적", ttl=0)
-                        st.session_state.h2h_df = conn.read(spreadsheet=target_url, worksheet="상대전적", ttl=0)
-                        st.success("동기화 완료!")
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error("URL을 찾을 수 없습니다.")
-
-        else:  # 📁 내 기기에서 파일 업로드
-            st.markdown("---")
             st.markdown("**1. 양식 다운로드 및 작성**")
             st.caption("아래 버튼을 눌러 빈 엑셀 양식을 다운로드하고, PC나 스마트폰에서 내용을 채워주세요.")
 
@@ -832,8 +822,7 @@ else:
                 width='stretch'
             )
 
-            st.markdown("**2. 작성된 파일 업로드 (Excel or CSV)**")
-            # 🌟 [수정됨] xlsx 뿐만 아니라 csv 파일도 업로드 가능하도록 허용
+            st.markdown("<strong>2. 작성된 파일 업로드 (Excel or CSV)</strong>")
             uploaded_file = st.file_uploader("파일 선택 (.xlsx, .csv)", type=['xlsx', 'xls', 'csv'])
 
             if uploaded_file:
@@ -843,7 +832,7 @@ else:
                             file_ext = uploaded_file.name.split('.')[-1].lower()
                             xls_data = {}
 
-                            # 🌟 [수정됨] CSV 파일일 경우 여러 인코딩을 순회하며 에러 없이 읽어들임
+                            # CSV 파일일 경우 여러 인코딩을 순회하며 에러 없이 읽어들임
                             if file_ext == 'csv':
                                 encodings = ['utf-8-sig', 'utf-8', 'cp949', 'euc-kr', 'latin1']
                                 df_loaded = None
@@ -868,7 +857,7 @@ else:
                                     st.error("CSV 파일의 인코딩을 인식할 수 없습니다. 파일을 확인해주세요.")
                                     st.stop()
 
-                            # 🌟 [수정됨] 엑셀 파일일 경우
+                            # 엑셀 파일일 경우
                             else:
                                 try:
                                     uploaded_file.seek(0)
@@ -908,40 +897,56 @@ else:
                                 conn.update(spreadsheet=target_url, worksheet="누적전적", data=st.session_state.cum_df)
                                 conn.update(spreadsheet=target_url, worksheet="상대전적", data=st.session_state.h2h_df)
 
-                                # 🔥 [추가된 부분] 구글 드라이브 상의 파일 이름 변경 로직
+                                # 구글 드라이브 상의 파일 이름 변경 로직
                                 try:
-                                    # 업로드된 파일 이름에서 확장자(.csv, .xlsx)를 제외한 이름 추출
                                     new_file_name = uploaded_file.name.split('.')[0]
-
-                                    # 1. Streamlit secrets에 저장된 구글 서비스 계정 정보를 딕셔너리 형태로 가져옴
                                     credentials_dict = dict(st.secrets["connections"]["gsheets"])
-
-                                    # 2. gspread 라이브러리를 직접 사용하여 인증 (conn.client 우회)
                                     gc = gspread.service_account_from_dict(credentials_dict)
-
-                                    # 3. URL로 시트를 열고 제목 업데이트
                                     spreadsheet = gc.open_by_url(target_url)
                                     spreadsheet.update_title(new_file_name)
 
-                                    st.success(f"✅ 데이터 저장 완료 및 구글 시트 이름이 '{new_file_name}'(으)로 변경되었습니다!")
+                                    st.toast(f"✅ 데이터 저장 및 시트 이름 변경 완료!", icon="🎉")
                                 except Exception as title_e:
-                                    # 이름 변경에 실패하더라도 데이터 저장은 완료되었음을 알림
-                                    st.warning(f"✅ 데이터는 저장되었으나 파일 이름 변경에 실패했습니다: {title_e}")
-                                    # sys.exit()
+                                    st.toast(f"⚠️ 데이터는 저장되었으나 이름 변경 실패: {title_e}", icon="⚠️")
                             else:
-                                st.success("✅ 데이터가 성공적으로 적용되었습니다! (클라우드 URL 없음)")
+                                st.toast("✅ 데이터 적용 완료! (클라우드 URL 없음)", icon="✅")
 
-                        time.sleep(1.5)
+                        # 대기 시간 없이 즉시 새로고침하여 메뉴 닫기
                         st.rerun()
                     except Exception as e:
                         st.error(f"파일 처리 중 오류 발생: {e}")
+
+        else:
+            # ---------------------------------------------------
+            # [일상 운영] 데이터가 이미 존재하면 '최신화' 버튼만 표시
+            # ---------------------------------------------------
+            st.success("✅ 구글 시트와 연동되어 운영 중입니다.")
+            st.info("💡 선수 추가/수정은 구글 시트에서 직접 진행하신 후, 아래 버튼을 눌러 앱에 반영해주세요.")
+
+            if st.button("☁️ 구글 시트 데이터 최신화", type="primary", width='stretch'):
+                with st.spinner("클라우드에서 최신 데이터를 가져오는 중..."):
+                    target_url = get_current_room_sheet_url(st.session_state.room_name)
+
+                    if target_url:
+                        st.session_state.main_df = conn.read(spreadsheet=target_url, worksheet="선수명단", ttl=0)
+                        st.session_state.cum_df = conn.read(spreadsheet=target_url, worksheet="누적전적", ttl=0)
+                        st.session_state.h2h_df = conn.read(spreadsheet=target_url, worksheet="상대전적", ttl=0)
+
+                        st.toast("✅ 구글 시트 동기화 완료!", icon="🔄")
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.error("URL을 찾을 수 없습니다.")
 
 # ---------------------------------------------------------
 # 3. 메인 화면 데이터 처리 (날짜 및 출석/조편성)
 # ---------------------------------------------------------
 selected_date = st.date_input("일자 선택", datetime.now(), disabled=not is_admin)
 CURRENT_DATE = selected_date.strftime('%Y-%m-%d')
-col_date = f"출석_{CURRENT_DATE}"
+# col_date = f"출석_{CURRENT_DATE}"
+# ❌ 기존 코드: col_date = f"출석_{CURRENT_DATE}"
+# 🟢 수정된 코드: 출석 컬럼에 회차(game_round)를 포함시킵니다.
+col_date = f"출석_{CURRENT_DATE}_{st.session_state.game_round}차전"
 
 if col_date not in st.session_state.main_df.columns:
     if '참석예정' in st.session_state.main_df.columns:
@@ -1130,7 +1135,6 @@ with tab_config:
                 }
 
                 st.session_state.config_confirmed = True
-
                 # 🌟 [수정 2] 설정이 완료되면 즉시 파일에 자동 저장
                 save_room_state(st.session_state.room_name)
                 st.rerun()
@@ -1153,13 +1157,10 @@ with tab_config:
             attendees['부수_숫자'] = attendees['부수'].apply(extract_busu)
             # 아까 만들어둔 랜덤 숫자를 매칭합니다.
             attendees['Random'] = attendees['이름'].map(cfg['tie_breakers'])
-
             # 💡 핵심: 실력이 비슷한 사람끼리 묶기 위해 부수 -> 조정부수 -> 랜덤 순으로 줄을 세웁니다.
             sorted_members = attendees.sort_values(['부수_숫자', 'Random'], ascending=True).reset_index(drop=True)
-
             # 총 몇 개의 실력 그룹(레벨)이 나오는지 계산합니다. (예: 16명이고 4조면 4개의 그룹)
             total_levels = math.ceil(len(sorted_members) / cfg['g'])
-
             # 현재 몇 번째 그룹(레벨)의 제비뽑기를 진행 중인지 추적합니다. (처음엔 0)
             draw_level = st.session_state.get('draw_level', 0)
 
