@@ -322,3 +322,74 @@ A팀과 B팀을 드롭다운으로 골라 빠르게 점수를 입력할 수 있�
 이 코드는 설정(탭2) ➔ 조 편성(탭3) ➔ 대진표 생성 및 점수 입력(탭4) ➔ 실시간 순위 확인
 및 데이터 관리(탭5) 로 이어지는 탁구 대회의 전체 라이프사이클을 완벽하게 자동화해 주는 훌륭한 시스템입니다.
  특히 중간중간 save_room_state를 통해 데이터가 날아가지 않도록 꼼꼼하게 자동 저장 로직이 구현되어 있는 것이 특징입니다.
+
+
+ ['https://docs.google.com/spreadsheets/d/1IjvnGRuumDNIcOyDmSay-7BNpsZ7BGeqSgJOmIDnw7w/edit?usp=sharing',
+ 'https://docs.google.com/spreadsheets/d/1enY_4PuDYzId9D2CvZSP1ZxyKBOLLCdvmuxAWniu-jI/edit?usp=drive_link',
+ 'https://docs.google.com/spreadsheets/d/1hstHIK5QX12nuJXpvqKFxz5VviEuuL3wssobhu924nM/edit?usp=drive_link',
+ 'https://docs.google.com/spreadsheets/d/1Jh49Lw6ETt-7RrDU9CIpr59-yt8EI3iJ5OEs3I_X8Ro/edit?usp=drive_link',
+ 'https://docs.google.com/spreadsheets/d/10wiPeAlcfVFG1Ea74T8tQmuOre4FtIULdFXt6h5DTfk/edit?usp=drive_link'
+
+ 전체적인 화면 시작 위치와 기본 여백은 1단계의 <style> 태그 안에서 .block-container의 padding-top 값을 수정하여 제어합니다. (예: 1rem으로 하면 더 위로 올라감)
+특정 요소들 사이의 간격은 기존의 st.write("")나 st.divider()를 지우고, 2단계에서 만든 v_space(픽셀값)을 호출하여 디테일하게 조절하시면 됩니다. (예: v_space(5)는 좁게, v_space(30)은 넓게)
+
+
+
+
+st.divider()나 st.write("") 대신에 사용하면 되나?
+
+
+Gemini 3 Pro
+
+네, 맞습니다! 이전 코드에 포함되어 있던 아래 부분을 말씀하시는 것이군요.
+
+Copy
+st.sidebar.markdown("<hr style='margin: 10px 0px;'>", unsafe_allow_html=True)
+정확히 st.divider()나 st.write("")를 대체하기 위해 사용한 커스텀 코드입니다.
+
+기본 기능 대신 굳이 저 코드를 사용하는 이유는 '위아래 간격(여백) 조절' 때문입니다. 차이점은 다음과 같습니다.
+
+st.divider(): 가로 구분선을 그어주지만, 위아래 여백(margin)이 기본적으로 꽤 넓게 설정되어 있습니다. 사이드바에 여러 메뉴를 넣을 때 사용하면 공간을 너무 많이 차지해서 메뉴들이 듬성듬성 벌어지는 단점이 있습니다.
+st.write(""): 빈 줄을 추가해 여백만 줄 뿐, 시각적인 구분선(가로줄)이 생기지 않습니다.
+<hr style='margin: 10px 0px;'>: 가로줄을 그어주면서 동시에 위아래 여백을 딱 10px로 좁게 설정해 줍니다. 덕분에 사이드바 공간을 낭비하지 않고 메뉴들을 깔끔하고 밀도 있게 배치할 수 있습니다.
+결론: 위아래 간격이 넓어도 상관없다면 Streamlit 기본 기능인 st.divider()를 쓰셔도 기능상 전혀 문제가 없습니다. 하지만 화면을 조금 더 오밀조밀하고 예쁘게 꾸미고 싶으실 때는 저 HTML 코드를 대신 사용하시면 아주 좋습니다!
+
+
+
+
+
+그러면 st.divider() 대신에 st.sidebar.markdown("<hr style='margin: 10px 0px;'>", unsafe_allow_html=True)를 사용하고
+st.write("") 대신에  v_space(20)를 사용하면 되네..
+
+
+Gemini 3 Pro
+
+네, 정확합니다! 완벽하게 이해하셨습니다! 👏
+
+말씀하신 대로 두 가지 방법을 활용하시면 Streamlit의 단점인 '넓고 고정된 기본 여백'을 해결하고 화면을 원하는 대로 아주 정밀하게 디자인하실 수 있습니다.
+
+**구분선: st.divider() 대신 st.sidebar.markdown("<hr style='margin: 10px 0px;'>", unsafe_allow_html=True)를 사용하면 선 위아래의 낭비되는 공간을 확 줄일 수 있습니다. (사이드바가 아닌 메인 화면에서는 st.sidebar를 빼고 st.markdown(...)으로 쓰시면 됩니다.)
+빈 공간(여백): st.write("")는 줄바꿈 크기가 고정되어 있지만, v_space(20) 같은 커스텀 함수를 사용하면 10px, 20px, 50px 등 원하는 픽셀만큼만 정확하게 빈 공간을 만들 수 있어서 훨씬 유용**합니다.
+(💡 참고: 혹시 v_space 함수를 아직 코드에 정의하지 않으셨다면, 코드 상단에 아래처럼 만들어두고 사용하시면 됩니다!)
+
+Copy
+def v_space(height):
+    st.markdown(f"<div style='height: {height}px;'></div>", unsafe_allow_html=True)
+이렇게 HTML과 CSS 요소를 살짝 섞어서 쓰시면 훨씬 더 완성도 높고 깔끔한 앱 화면을 구성하실 수 있습니다!
+
+
+
+
+
+그러면 선이 있고 간격을 조정하는 거네
+
+
+Gemini 3 Pro
+
+네, 정확합니다! 😊
+
+말씀하신 코드는 딱 그 두 가지 역할을 동시에 수행합니다.
+
+<hr> : 시각적인 가로선을 그어줍니다.
+style='margin: 10px 0px;' : 선 위아래의 간격을 10px로 세밀하게 조정해 줍니다.
+그래서 기본 st.divider()가 가진 '너무 넓은 여백' 문제를 해결하면서, 선을 통해 깔끔하게 구역을 나눌 수 있는 것입니다. 완벽하게 핵심을 파악하셨습니다! 👏
