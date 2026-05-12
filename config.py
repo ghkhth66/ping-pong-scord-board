@@ -1,54 +1,109 @@
 # UX/UI 개선을 위한 커스텀 CSS (버튼 색상, 테이블 너비, 정렬 등 디자인 요소 변경)
 main_markdown_text = """
 <style>
-    /* 1. 특정 배너(알림창, 설정창 등)의 디자인을 꾸미는 클래스 */
+    /* =========================================
+       1. 전체 화면 및 레이아웃 여백 조정
+       ========================================= */
+    
+    /* 메인 화면(우측)의 상하 여백 줄이기 */
+    /* 기본값(4\~6rem)이 너무 넓어 화면 상단이 비어 보이는 것을 방지합니다. */
+    .block-container {
+        padding-top: 2rem !important; 
+        padding-bottom: 2rem !important;
+    }
+    
+    /* 사이드바(좌측)의 상단 여백 줄이기 */
+    /* 메인 화면과 사이드바의 시작 높이를 비슷하게 맞추기 위해 사용합니다. */
+    [data-testid="stSidebar"] .block-container {
+        padding-top: 2rem !important;
+    }
+    
+    /* 다단(Column) 레이아웃 내부 요소들의 수직 중앙 정렬 */
+    /* st.columns()를 썼을 때, 양쪽 컬럼의 내용물 높이가 달라도 세로 중앙에 예쁘게 맞춰집니다. */
+    [data-testid="column"] { 
+        display: flex;             /* Flexbox 레이아웃 활성화 */
+        flex-direction: column;    /* 내부 요소들을 위에서 아래로(세로로) 배치 */
+        justify-content: center;   /* 세로 기준 '중앙'에 오도록 정렬 */
+    }
+    
+    
+    /* =========================================
+       2. 버튼(Button) 디자인 및 간격 설정
+       ========================================= */
+    
+    /* 모든 버튼의 상하 여백 미세 조정 */
+    /* 버튼들이 위아래 요소와 너무 딱 붙거나 멀어지지 않게 간격을 통일합니다. */
+    .stButton > button {
+        margin-top: 5px !important;
+        margin-bottom: 5px !important;
+    }
+    
+    /* Primary(주요) 버튼 스타일 변경 */
+    /* st.button("확인", type="primary") 처럼 사용된 강조 버튼의 색상을 바꿉니다. */
+    div.stButton > button[kind="primary"] { 
+        background-color: #28a745 !important; /* 배경색을 초록색으로 강제 적용 */
+        color: white !important;              /* 글자색을 흰색으로 강제 적용 */
+    }
+    
+    /* Secondary(보조/일반) 버튼 스타일 변경 */
+    /* type을 지정하지 않은 일반 버튼들의 색상을 바꿉니다. */
+    div.stButton > button[kind="secondary"] { 
+        background-color: #dc3545 !important; /* 배경색을 빨간색으로 강제 적용 */
+        color: white !important;              /* 글자색을 흰색으로 강제 적용 */
+    }
+    
+    
+    /* =========================================
+       3. 기본 위젯(탭, 라디오, 알림창 등) 스타일
+       ========================================= */
+    
+    /* 탭(Tabs) 내부의 상단 여백 줄이기 */
+    /* 탭 메뉴를 클릭했을 때, 아래 뜨는 내용물이 탭 제목과 너무 멀어지지 않게 당겨줍니다. */
+    .stTabs [data-baseweb="tab-panel"] {
+        padding-top: 10px !important; 
+    }
+    
+    /* 라디오 버튼(Radio) 가로 정렬 및 간격 축소 */
+    /* 기본적으로 세로로 나열되는 라디오 버튼을 가로로 예쁘게 나열합니다. */
+    div.row-widget.stRadio > div { 
+        flex-direction: row; /* 세로(column) 배치를 가로(row) 배치로 변경 */
+        gap: 10px;           /* 동그라미 항목들 사이의 간격을 10px로 좁게 설정 */
+        align-items: center; /* 동그라미와 글자가 삐뚤어지지 않게 수직 중앙 정렬 */
+    }
+    
+    /* 알림창(st.info, st.warning, st.success 등) 상하 여백 조절 */
+    /* 알림창이 차지하는 불필요한 위아래 공간을 줄여줍니다. */
+    .stAlert {
+        margin-top: 10px !important;
+        margin-bottom: 10px !important;
+    }
+    
+    /* Expander(접기/펴기 메뉴) 헤더 간격 조절 */
+    /* st.expander()의 제목 부분 위아래 여백을 줄여서 공간을 절약합니다. */
+    .streamlit-expanderHeader {
+        padding-top: 5px !important;
+        padding-bottom: 5px !important;
+    }
+    
+    
+    /* =========================================
+       4. 커스텀 클래스 (사용자 정의 요소)
+       ========================================= */
+    
+    /* 특정 배너(알림창, 설정창 등)를 꾸미는 디자인 */
+    /* st.markdown("<div class='setting-banner'>내용</div>", unsafe_allow_html=True) 형태로 사용합니다. */
     .setting-banner { 
         background-color: #f8f9fa; /* 배경색을 아주 연한 회색으로 설정 */
         border: 2px solid #28a745; /* 테두리를 2px 두께의 초록색 실선으로 설정 */
         border-radius: 12px;       /* 모서리를 둥글게 처리 (숫자가 클수록 더 둥글어짐) */
-        padding: 20px;             /* 테두리 안쪽 여백을 20px로 설정하여 내용물이 답답해 보이지 않게 함 */
-        margin-bottom: 20px;       /* 배너 아래쪽 바깥 여백을 20px 주어 다른 요소와 간격을 띄움 */
+        padding: 20px;             /* 테두리 안쪽 여백을 20px 주어 글자가 테두리에 붙지 않게 함 */
+        margin-bottom: 20px;       /* 배너 아래쪽 바깥 여백을 20px 주어 다음 요소와 간격을 띄움 */
     }
-
-    /* 2. Streamlit의 'Primary(주요)' 버튼 스타일 변경 */
-    div.stButton > button[kind="primary"] { 
-        background-color: #28a745 !important; /* 버튼 배경색을 초록색으로 강제 적용 (!important) */
-        color: white !important;              /* 버튼 글자색을 흰색으로 강제 적용 */
-    }
-
-    /* 3. Streamlit의 'Secondary(보조)' 버튼 스타일 변경 */
-    div.stButton > button[kind="secondary"] { 
-        background-color: #dc3545 !important; /* 버튼 배경색을 빨간색으로 강제 적용 */
-        color: white !important;              /* 버튼 글자색을 흰색으로 강제 적용 */
-    }
-
-    /* 4. 커스텀 테이블을 감싸는 영역의 너비 설정 */
+    
+    /* 커스텀 테이블을 감싸는 영역의 너비 설정 */
+    /* HTML로 직접 만든 테이블이 화면 가로 길이에 꽉 차도록 만들어 줍니다. */
     .custom-table-wrapper { 
-        width: 100%; /* 테이블이 화면(또는 부모 컨테이너)의 가로 너비를 100% 꽉 채우도록 설정 */
-    }
-
-    /* 5. 라디오 버튼 가로 정렬 및 간격 축소 */
-    div.row-widget.stRadio > div { 
-        flex-direction: row; /* 기본적으로 세로로 나열되는 라디오 버튼을 가로(row)로 나열되게 변경 */
-        gap: 10px;           /* 라디오 버튼 항목 사이의 간격을 10px로 좁게 설정 */
-        align-items: center; /* 라디오 버튼과 텍스트가 수직 기준으로 중앙에 오도록 정렬 */
-    }
-
-    /* 6. 컬럼 내 수직 중앙 정렬을 위한 트릭 */
-    [data-testid="column"] { 
-        display: flex;             /* 컬럼 내부 요소를 Flexbox 레이아웃으로 설정 */
-        flex-direction: column;    /* 내부 요소들이 위에서 아래로(세로로) 배치되도록 설정 */
-        justify-content: center;   /* 내부 요소들을 컬럼의 세로 기준 '중앙'에 배치 (수직 중앙 정렬) */
-    }
-
-    /* 7. 화면 맨 위쪽 여백 줄이기 (새로 추가된 부분) */
-    .block-container {
-        padding-top: 2.5rem; /* 숫자를 줄일수록 위로 올라갑니다 (기본값 약 6rem) */
-    }
-
-    /* 사이드바(왼쪽)의 맨 위쪽 여백 조절 */
-    [data-testid="stSidebar"] .block-container {
-        padding-top: 2rem;
+        width: 100%; 
     }
 </style>
 """
