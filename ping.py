@@ -62,16 +62,46 @@ PRE_MADE_URLS = st.secrets["pre_made_urls"]
 MASTER_PASSWORD = st.secrets["master_password"]
 
 def hash_password(password):
-    """
-    HMAC과 Salt를 사용하여 비밀번호를 안전하게 해싱합니다.
-    Args:
-        password (str): 원문 비밀번호
-    Returns:
-        str: 해싱된 비밀번호 문자열
-    """
-    salt = st.secrets.get("pw_salt", "default_secure_salt_value").encode('utf-8')
-    return hmac.new(salt, password.encode('utf-8'), hashlib.sha256).hexdigest()
+    """비밀번호를 안전하게 보관하기 위해 SHA-256 방식으로 암호화하는 함수"""
+    return hashlib.sha256(password.encode()).hexdigest()
 
+# def hash_password_old(password):
+#     """비밀번호를 안전하게 보관하기 위해 SHA-256 방식으로 암호화하는 함수"""
+#     return hashlib.sha256(password.encode()).hexdigest()
+#
+# def hash_password_new(password):
+#     """
+#     HMAC과 Salt를 사용하여 비밀번호를 안전하게 해싱합니다.
+#     Args:
+#         password (str): 원문 비밀번호
+#     Returns:
+#         str: 해싱된 비밀번호 문자열
+#     """
+#     salt = st.secrets.get("pw_salt", "default_secure_salt_value").encode('utf-8')
+#     return hmac.new(salt, password.encode('utf-8'), hashlib.sha256).hexdigest()
+#
+#
+# # --- 로그인 검증 로직 ---
+# admin_password = st.sidebar.text_input("관리자 비밀번호", type="password")
+# saved_password = str(room_data['비밀번호'].values[0]).strip()  # DB에 저장된 암호문
+#
+# # 마스터 비밀번호 해싱 (신버전 사용)
+# HASHED_MASTER_PW = hash_password_new(MASTER_PASSWORD)
+#
+# if admin_password:
+#     # 입력한 비밀번호를 두 가지 방식으로 모두 변환해봄
+#     input_hash_old = hash_password_old(admin_password)
+#     input_hash_new = hash_password_new(admin_password)
+#
+#     # 1. 마스터 비밀번호와 일치하는지 확인 (신버전 해시 비교)
+#     # 2. 또는 DB에 저장된 방 비밀번호(구버전 or 신버전)와 일치하는지 확인
+#     if input_hash_new == HASHED_MASTER_PW or saved_password == input_hash_old or saved_password == input_hash_new:
+#         st.sidebar.success("👑 관리자 모드로 접속 중입니다.")
+#         # 관리자 로직 실행...
+#     else:
+#         st.sidebar.error("❌ 비밀번호가 틀렸습니다.")
+# 수정 후 (정상 동작)
+# HASHED_MASTER_PW = hash_password_new(MASTER_PASSWORD)
 HASHED_MASTER_PW = hash_password(MASTER_PASSWORD)
 
 # ---------------------------------------------------------------------
@@ -93,6 +123,7 @@ except ImportError:
 
 # # 🌟 [보안성 개선] 하드코딩된 fallback 비밀번호 제거 (보안 취약점 제거)
 cookie_password = st.secrets.get("cookie_password")
+
 if not cookie_password:
     st.error("⚠️ 시스템 설정 오류: cookie_password가 secrets에 설정되지 않았습니다.")
     st.stop()
