@@ -1147,25 +1147,50 @@ else:
             kick_all_viewers(room_name)
             st.sidebar.success("모든 일반 사용자를 퇴출했습니다.")
             st.rerun()
-    else:
-        st.sidebar.info("👁️ 일반 사용자 모드 (조회 전용)")
 
-        # 🌟 [추가] 일반 사용자가 최신 진행 상황을 불러올 수 있는 새로고침 버튼
-        if st.sidebar.button("🔄 최신 진행상황 불러오기", type="primary", use_container_width=True):
-            with st.spinner("최신 데이터를 불러오는 중..."):
+    else:
+    st.sidebar.info("👁️ 일반 사용자 모드 (조회 전용)")
+
+    # --- [추가] 메시지를 화면에 고정하기 위한 세션 상태 초기화 ---
+    if 'alert_msg' not in st.session_state:
+        st.session_state.alert_msg = None
+    if 'is_error' not in st.session_state:
+        st.session_state.is_error = False
+
+    # --- [추가] 세션에 저장된 메시지가 있다면 버튼 위에 고정해서 보여줌 ---
+    if st.session_state.alert_msg:
+        if st.session_state.is_error:
+            st.sidebar.error(st.session_state.alert_msg)  # 에러면 빨간색
+        else:
+            st.sidebar.success(st.session_state.alert_msg)  # 성공이면 초록색
+
+        # 한 번 보여준 후에는 메시지 비우기 (다음 동작을 위해)
+        st.session_state.alert_msg = None
+
+    # 🌟 일반 사용자가 최신 진행 상황을 불러올 수 있는 새로고침 버튼
+    if st.sidebar.button("🔄 최신 진행상황 불러오기", type="primary", use_container_width=True):
+        with st.spinner("최신 데이터를 불러오는 중..."):
+            try:
                 # 1. JSON 파일에서 최신 조 편성 및 스코어보드 불러오기
                 load_room_state(room_name)
 
                 # 2. 구글 시트에서 최신 선수명단/전적 불러오기 (필요시)
                 target_url = get_current_room_sheet_url(room_name)
                 if target_url:
-                    try:
-                        st.session_state.main_df = conn.read(spreadsheet=target_url, worksheet="선수명단", ttl=0)
-                    except:
-                        pass
+                    # 기존의 except: pass를 지우고 에러를 잡도록 수정
+                    st.session_state.main_df = conn.read(spreadsheet=target_url, worksheet="선수명단", ttl=0)
 
-            st.toast("✅ 최신 경기 결과가 반영되었습니다!", icon="🔄")
-            st.rerun()
+                # 정상적으로 다 불러왔다면 성공 메시지를 세션에 저장
+                st.session_state.alert_msg = "✅ 최신 경기 결과가 반영되었습니다!"
+                st.session_state.is_error = False
+
+            except Exception as e:
+                # 에러가 발생하면 에러 내용을 세션에 저장
+                st.session_state.alert_msg = f"🚨 데이터 불러오기 실패! 상세내용: {e}"
+                st.session_state.is_error = True
+
+        # 메시지를 세션에 안전하게 적어둔 뒤에 화면을 새로고침 (Rerun)
+        st.rerun()
 
     if st.sidebar.button("🔒 로그아웃", width='stretch'):
         for k in config.keys_to_clear_is_admin:
