@@ -1150,6 +1150,23 @@ else:
     else:
         st.sidebar.info("👁️ 일반 사용자 모드 (조회 전용)")
 
+        # 🌟 [추가] 일반 사용자가 최신 진행 상황을 불러올 수 있는 새로고침 버튼
+        if st.sidebar.button("🔄 최신 진행상황 불러오기", type="primary", use_container_width=True):
+            with st.spinner("최신 데이터를 불러오는 중..."):
+                # 1. JSON 파일에서 최신 조 편성 및 스코어보드 불러오기
+                load_room_state(room_name)
+
+                # 2. 구글 시트에서 최신 선수명단/전적 불러오기 (필요시)
+                target_url = get_current_room_sheet_url(room_name)
+                if target_url:
+                    try:
+                        st.session_state.main_df = conn.read(spreadsheet=target_url, worksheet="선수명단", ttl=0)
+                    except:
+                        pass
+
+            st.toast("✅ 최신 경기 결과가 반영되었습니다!", icon="🔄")
+            st.rerun()
+
     if st.sidebar.button("🔒 로그아웃", width='stretch'):
         for k in config.keys_to_clear_is_admin:
             if k in st.session_state: del st.session_state[k]
