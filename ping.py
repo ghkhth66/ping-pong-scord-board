@@ -65,43 +65,6 @@ def hash_password(password):
     """비밀번호를 안전하게 보관하기 위해 SHA-256 방식으로 암호화하는 함수"""
     return hashlib.sha256(password.encode()).hexdigest()
 
-# def hash_password_old(password):
-#     """비밀번호를 안전하게 보관하기 위해 SHA-256 방식으로 암호화하는 함수"""
-#     return hashlib.sha256(password.encode()).hexdigest()
-#
-# def hash_password_new(password):
-#     """
-#     HMAC과 Salt를 사용하여 비밀번호를 안전하게 해싱합니다.
-#     Args:
-#         password (str): 원문 비밀번호
-#     Returns:
-#         str: 해싱된 비밀번호 문자열
-#     """
-#     salt = st.secrets.get("pw_salt", "default_secure_salt_value").encode('utf-8')
-#     return hmac.new(salt, password.encode('utf-8'), hashlib.sha256).hexdigest()
-#
-#
-# # --- 로그인 검증 로직 ---
-# admin_password = st.sidebar.text_input("관리자 비밀번호", type="password")
-# saved_password = str(room_data['비밀번호'].values[0]).strip()  # DB에 저장된 암호문
-#
-# # 마스터 비밀번호 해싱 (신버전 사용)
-# HASHED_MASTER_PW = hash_password_new(MASTER_PASSWORD)
-#
-# if admin_password:
-#     # 입력한 비밀번호를 두 가지 방식으로 모두 변환해봄
-#     input_hash_old = hash_password_old(admin_password)
-#     input_hash_new = hash_password_new(admin_password)
-#
-#     # 1. 마스터 비밀번호와 일치하는지 확인 (신버전 해시 비교)
-#     # 2. 또는 DB에 저장된 방 비밀번호(구버전 or 신버전)와 일치하는지 확인
-#     if input_hash_new == HASHED_MASTER_PW or saved_password == input_hash_old or saved_password == input_hash_new:
-#         st.sidebar.success("👑 관리자 모드로 접속 중입니다.")
-#         # 관리자 로직 실행...
-#     else:
-#         st.sidebar.error("❌ 비밀번호가 틀렸습니다.")
-# 수정 후 (정상 동작)
-# HASHED_MASTER_PW = hash_password_new(MASTER_PASSWORD)
 HASHED_MASTER_PW = hash_password(MASTER_PASSWORD)
 
 # ---------------------------------------------------------------------
@@ -168,14 +131,6 @@ def extract_busu(busu_str):
         return 9
 
 def align_columns_to_template(uploaded_df, template_df):
-    """
-    업로드된 데이터프레임이 템플릿의 필수 컬럼을 모두 포함하도록 맞춥니다.
-    Args:
-        uploaded_df (pd.DataFrame): 업로드된 데이터
-        template_df (pd.DataFrame): 기준 템플릿 데이터
-    Returns:
-        pd.DataFrame: 컬럼이 보정된 데이터프레임
-    """
     expected_columns = template_df.columns.tolist()
     for col in expected_columns:
         if col not in uploaded_df.columns:
@@ -192,12 +147,6 @@ def reset_config_state():
             del st.session_state[k]
 
 def atomic_write_json(filepath, data):
-    """
-    저장 중 서버 다운 시 데이터 유실을 막기 위해 원자적 쓰기(Atomic Write)를 수행합니다.
-    Args:
-        filepath (str): 저장할 파일 경로
-        data (dict): 저장할 JSON 데이터
-    """
     temp_file = f"{filepath}.tmp"
     try:
         with open(temp_file, "w", encoding="utf-8") as f:
@@ -214,6 +163,7 @@ def v_space(height=10):
 
 def responsive_text(text, pc_size="28px", mobile_size="18px", font_weight="bold", color="inherit"):
     """PC와 모바일에서 글자 크기가 자동으로 변하는 반응형 텍스트를 출력합니다."""
+    # 🎨 [UI/디자인 수정] 텍스트 크기를 바꾸고 싶다면 이 함수를 호출하는 곳에서 pc_size와 mobile_size 값을 변경하세요.
     class_name = f"resp-text-{pc_size}-{mobile_size}".replace("px", "").replace(" ", "")
     completed_css = config.css_responsive_text.format(
         class_name=class_name, pc_size=pc_size, font_weight=font_weight,
@@ -221,6 +171,37 @@ def responsive_text(text, pc_size="28px", mobile_size="18px", font_weight="bold"
     )
     st.markdown(completed_css, unsafe_allow_html=True)
     st.markdown(f'<div class="{class_name}">{text}</div>', unsafe_allow_html=True)
+
+def responsive_msg(text, pc_size="16px", mobile_size="14px", text_color="black", bg_color="#f0f2f6",
+                   font_weight="normal", gap_top="10px", gap_bottom="10px"):
+    class_name = f"resp-msg-{pc_size}-{mobile_size}".replace("px", "").replace(" ", "")
+
+    css = f"""
+    <style>
+        .{class_name} {{ font-size: {pc_size}; }}
+        @media (max-width: 768px) {{
+            .{class_name} {{ font-size: {mobile_size}; }}
+        }}
+    </style>
+    """
+
+    html = f"""
+    <div class="{class_name}" style="background-color: {bg_color}; color: {text_color}; font-weight: {font_weight}; padding: 5px 15px; line-height: 1.2; border-radius: 8px; margin-top: {gap_top}; margin-bottom: {gap_bottom};">
+        {text}
+    </div>
+    """
+    st.markdown(css + html, unsafe_allow_html=True)
+
+# ==========================================
+# 🚀 사용 예시 (테스트 해보세요!)
+# ==========================================
+# 1. 기본 사용
+responsive_msg(
+    " ",
+    pc_size="12px", mobile_size="12px",
+    text_color="#155724", bg_color="#d4edda", font_weight="bold",
+    gap_top="5px", gap_bottom="5px"
+)
 
 # =====================================================================
 # 🌟 [추가] 일반 사용자(뷰어) 세션 관리 함수
@@ -276,9 +257,7 @@ def kick_all_viewers(room_name):
                 atomic_write_json(VIEWER_FILE, data)
         except:
             pass
-# =====================================================================
-# [3단계] 데이터베이스 및 템플릿 설정(Setup) 함수
-# =====================================================================
+
 # 구글 시트 연결 객체 생성
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -296,6 +275,27 @@ def load_room_list():
         st.error("마스터 DB 연결 실패. 잠시 후 다시 시도해주세요.")
         logging.error(f"마스터 DB 연결 실패: {e}")  # 🌟 [운영성 개선] 상세 에러는 로그로만
         return pd.DataFrame(), []
+
+@st.cache_data
+def prepare_draw_data(attendees_df, tie_breakers):
+    attendees = attendees_df.copy()
+    # 결측치 방어 및 부수 숫자 추출
+    attendees['부수_숫자'] = attendees['부수'].fillna('').apply(extract_busu)
+
+    # 부수_조정 적용
+    if '부수_조정' in attendees.columns:
+        attendees['부수_조정'] = pd.to_numeric(attendees['부수_조정'], errors='coerce').fillna(0)
+    else:
+        attendees['부수_조정'] = 0
+
+    # 🔒 [수정] 데이터 무결성 끝판왕: 복합키(이름_부수) 생성 및 랜덤값 부여
+    attendees['고유키'] = attendees['이름'].astype(str) + "_" + attendees['부수'].astype(str)
+    attendees['Random'] = attendees['고유키'].map(tie_breakers).fillna(0)
+
+    return attendees.sort_values(
+        by=['부수_숫자', '부수_조정', 'Random'],
+        ascending=[True, True, True]
+    ).reset_index(drop=True)
 
 def get_current_room_sheet_url(target_room):
     """
@@ -378,6 +378,27 @@ def initialize_default_sheets(target_url, room_name):
         logging.error(f"시트 초기화 중 오류 발생 ({room_name}): {e}")
         return False
 
+
+# 🌟 [추가] 코드 최상단(또는 함수 모음 영역)에 초기화 전용 함수 생성
+def reset_draw_state(reset_config=False):
+    """제비뽑기 및 설정 관련 세션을 깔끔하게 청소하는 함수"""
+    keys_to_pop = ['draw_level', 'draw_results', 'draw_completed', 'balloons_shown']
+    if reset_config:
+        keys_to_pop.extend(['config_confirmed', 'teams_generated'])
+
+    for k in keys_to_pop:
+        st.session_state.pop(k, None)
+
+    # 동적 생성 키 삭제
+    keys_to_delete = [k for k in st.session_state.keys() if k.startswith(("group_selections_", "select_"))]
+    for k in keys_to_delete:
+        del st.session_state[k]
+
+# 🌟 [추가] 라디오 버튼 변경 시 즉각 반응하는 콜백 함수
+def on_draw_method_change():
+    """사용자가 조 편성 방식을 변경하는 순간 기존 제비뽑기 데이터를 날림"""
+    reset_draw_state(reset_config=False)
+
 # =====================================================================
 # [수정 포인트 1] Caching 적용: 무거운 엑셀 생성 작업을 캐싱하여 속도 향상
 # =====================================================================
@@ -436,6 +457,8 @@ def save_room_state(room_name):
         "draw_results": st.session_state.get("draw_results", {}),
         "draw_completed": st.session_state.get("draw_completed", False),
         "draw_level": st.session_state.get("draw_level", 0),
+        # 🌟 [수정] 모바일 새로고침 대비 UI 상태(match_details)도 함께 저장합니다.
+        "match_details": st.session_state.get("match_details", {}),
         "matrix": st.session_state.matrix.to_json(
             orient="split") if "matrix" in st.session_state and st.session_state.matrix is not None else None,
         "ind_matrix": st.session_state.ind_matrix.to_json(
@@ -473,7 +496,12 @@ def load_room_state(room_name):
         st.session_state.draw_completed = room_data.get("draw_completed", False)
         st.session_state.draw_level = room_data.get("draw_level", 0)
 
-        # 🌟 [수정된 부분] DataFrame을 불러올 때 인덱스와 컬럼을 명확히 문자열(str)로 고정합니다.
+        # 🌟 [수정] 저장된 UI 상태(match_details) 복구 (모바일 튕김 방지)
+        # JSON은 딕셔너리 키를 문자열로 바꾸므로, 다시 정수(int)로 변환하여 복구합니다.
+        saved_match_details = room_data.get("match_details", {})
+        st.session_state.match_details = {int(k): v for k, v in
+                                          saved_match_details.items()} if saved_match_details else {}
+
         if room_data.get("matrix"):
             df_m = pd.read_json(StringIO(room_data["matrix"]), orient="split")
             df_m.index = df_m.index.astype(str)
@@ -524,7 +552,6 @@ def get_history_keys():
 
 def load_league_history(key_name):
     """선택한 리그 데이터를 JSON 파일에서 불러와 세션 상태에 반영합니다."""
-    # HISTORY_FILE 변수는 전역에 정의되어 있다고 가정합니다.
 
     if not os.path.exists(HISTORY_FILE): return False
     try:
@@ -551,14 +578,7 @@ def load_league_history(key_name):
 # 4. 핵심 비즈니스 로직 (Core Business Logic)
 # 경기 결과를 바탕으로 전적을 계산하고 업데이트하는 핵심 로직입니다.
 def update_cumulative_record(p_a, p_b, s_a, s_b):
-    """
-    경기가 끝날 때마다 선수들의 누적 전적과 상대 전적을 업데이트합니다.
-    Args:
-        p_a (str): A 선수 이름
-        p_b (str): B 선수 이름
-        s_a (int): A 선수 점수
-        s_b (int): B 선수 점수
-    """
+    """경기가 끝날 때마다 선수들의 누적 전적과 상대 전적을 업데이트합니다."""
     if 'cum_df' not in st.session_state:
         st.session_state.cum_df = get_sheet_template("누적전적")
 
@@ -686,13 +706,15 @@ def render_attendance_tab(df, col_date, is_admin, live_names):
     display_cols = [c for c in ['순서', '이름', '참석', '부수'] if c in df.columns]
     mid_idx = len(df) // 2 + (len(df) % 2)
 
-    col1, col2 = st.columns(2)
+    # 🎨 [UI/디자인 수정] 출석체크 표를 좌우 1:1 비율로, gap="small"을 추가하여 좌우 테이블 사이의 간격을 좁힙니다.
+    col1, col2 = st.columns(2, gap="small")
+    # width='stretch' 대신 공식 파라미터인 use_container_width=True를 사용합니다.
     with col1:
         edited_left = st.data_editor(df.iloc[:mid_idx][display_cols], hide_index=True, disabled=not is_admin,
-                                     key="editor_left", width='stretch')
+                                     key="editor_left", height=250, use_container_width=True)
     with col2:
         edited_right = st.data_editor(df.iloc[mid_idx:][display_cols], hide_index=True, disabled=not is_admin,
-                                      key="editor_right", width='stretch')
+                                      key="editor_right", height=250, use_container_width=True)
 
     edited_df = pd.concat([edited_left, edited_right], ignore_index=True)
     current_checked = edited_df[edited_df['참석'] == True]
@@ -700,14 +722,34 @@ def render_attendance_tab(df, col_date, is_admin, live_names):
     st.info(f"**현재 참석 ({len(current_checked)}명):** \n\n {live_names if live_names else '없음'}")
 
     if is_admin:
-        btn_label = "확정 완료 (참석자 저장됨)" if st.session_state.attendance_confirmed else "참석자 확정하기"
-        btn_type = "primary" if st.session_state.attendance_confirmed else "secondary"
+        btn_col1, btn_col2 = st.columns(2, gap="small")
 
-        if st.button(btn_label, type=btn_type, width='stretch'):
-            st.session_state.main_df[col_date] = edited_df['참석'].apply(lambda x: 'Y' if x else 'N')
-            st.session_state.attendance_confirmed = True
-            st.session_state.show_success_msg = f" 오늘의 참석자 명단이 시스템에 기록되었습니다.!"
-            st.rerun()  # 확정 시에는 전체 화면 갱신
+        # 왼쪽 컬럼: 확정 완료 버튼
+        with btn_col1:
+            btn_label = "확정 완료 (참석자 저장됨)" if st.session_state.attendance_confirmed else "참석자 확정하기"
+            btn_type = "primary" if st.session_state.attendance_confirmed else "secondary"
+
+            # 🌟 수정됨: width='stretch' 대신 use_container_width=True 사용
+            if st.button(btn_label, type=btn_type, use_container_width=True):
+                st.session_state.main_df[col_date] = edited_df['참석'].apply(lambda x: 'Y' if x else 'N')
+                st.session_state.attendance_confirmed = True
+                st.session_state.show_success_msg = f" 오늘의 참석자 명단이 시스템에 기록되었습니다.!"
+                st.rerun()  # 확정 시에는 전체 화면 갱신
+
+        # 오른쪽 컬럼: 다운로드 버튼
+        with btn_col2:
+            # 현재까지의 모든 데이터(출석 기록 포함)를 CSV 파일 형태로 변환합니다.
+            csv_main = st.session_state.main_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
+
+            st.download_button(
+                label="📥 최신 명단(CSV) 다운로드",
+                data=csv_main,
+                file_name=f"{room_name}_최신명단_{CURRENT_DATE}.csv",
+                mime="text/csv",
+                type="primary",
+                # width='stretch'
+                use_container_width=True
+            )
 
 # =====================================================================
 # [수정 포인트 3] Fragment 적용: 제비뽑기 화면 부분 재실행
@@ -715,91 +757,165 @@ def render_attendance_tab(df, col_date, is_admin, live_names):
 @st.fragment
 def render_draw_process(cfg, sorted_members, total_levels, draw_level):
     """제비뽑기 조 선택 시 전체 코드가 재실행되지 않도록 Fragment를 적용합니다."""
+
+    # 🌟 [필수 초기화] 처음 실행 시 세션 상태가 없어서 발생하는 에러 방지
+    if 'draw_results' not in st.session_state:
+        st.session_state.draw_results = {}
+    if 'draw_level' not in st.session_state:
+        st.session_state.draw_level = 0
+    if 'draw_completed' not in st.session_state:
+        st.session_state.draw_completed = False
+
+    is_admin = st.session_state.get('is_admin', True)
+
+    # 🌟 1. 결과를 메인 데이터프레임에 '조용히' 반영하는 내부 함수
+    def apply_results_to_main_df():
+        st.session_state.draw_completed = True
+        df = st.session_state.main_df.copy()
+
+        if '조' in df.columns:
+            df['조'] = df['조'].astype(object)
+        else:
+            df['조'] = None
+
+        for name, team in st.session_state.draw_results.items():
+            df.loc[df['이름'] == name, '조'] = str(team)
+
+        st.session_state.main_df = df
+
+    # 🌟 2. 완료 체크 로직 및 안내 메시지
+    if st.session_state.draw_level >= total_levels:
+        if not st.session_state.draw_completed:
+            apply_results_to_main_df()
+            save_room_state(st.session_state.room_name)
+            st.rerun()
+
+        # 🎯 [추가] 완료 시 사용자에게 메인 버튼을 누르도록 친절하게 안내
+        st.success("🎉 제비뽑기가 모두 완료되었습니다! \n\n위의 '설정 확정 및 편성 시작' 버튼을 눌러 조편성 결과를 최종 반영해주세요.")
+        return
+
+    # ---------------------------------------------------------
+    # 🚀 3. UI 렌더링 부분 (충돌 방지 로직 유지)
+    # ---------------------------------------------------------
     for level in range(total_levels):
         start_idx = level * cfg['g']
         end_idx = min((level + 1) * cfg['g'], len(sorted_members))
         current_group = sorted_members.iloc[start_idx:end_idx]
         group_members = current_group['이름'].tolist()
 
-        responsive_text(f"📋 그룹 {level + 1}", pc_size="20px", mobile_size="16px")
-        cols = st.columns(cfg['g'])
+        # 1️⃣ 이미 완료된 그룹
+        if level < st.session_state.draw_level:
+            result_texts = []
+            for _, row in current_group.iterrows():
+                assigned_team = st.session_state.draw_results.get(row['이름'], "-")
+                result_texts.append(f"{row['이름']}({assigned_team}조)")
 
-        if level < draw_level:
-            for i, (idx, row) in enumerate(current_group.iterrows()):
-                with cols[i % cfg['g']]:
-                    assigned_team = st.session_state.draw_results.get(row['이름'], "-")
-                    st.success(f" **{row['이름']}** ➔ **{assigned_team}조**")
+            st.markdown(
+                f"<div style='color:#155724; background-color:#d4edda; padding:5px 8px; border-radius:5px; margin-bottom:2px; font-size:14px;'>"
+                f"✅ <b>그룹 {level + 1} 완료:</b> {', '.join(result_texts)}</div>",
+                unsafe_allow_html=True)
 
-        elif level == draw_level:
+        # 2️⃣ 현재 진행 중인 그룹
+        elif level == st.session_state.draw_level:
+            st.markdown(
+                "<div style='margin-top: 5px; margin-bottom: 5px;'><hr style='margin: 0px; border: 1px solid #ddd;'></div>",
+                unsafe_allow_html=True)
+            responsive_text(f"🎯 그룹 {level + 1} 진행 중", pc_size="16px", mobile_size="14px")
+            st.markdown("<div style='margin-top: -10px;'></div>", unsafe_allow_html=True)
+
+            cols = st.columns(cfg['g'], gap="small")
             available_options = list(range(1, cfg['g'] + 1))
-            state_key = f"group_selections_{level}"
 
-            if state_key not in st.session_state:
-                st.session_state[state_key] = {name: available_options[i] for i, name in enumerate(group_members)}
-                st.session_state[f"{state_key}_prev"] = st.session_state[state_key].copy()
+            unique_keys = [f"{i}_{name}" for i, name in enumerate(group_members)]
+            prev_state_key = f"group_selections_prev_{level}"
 
-            def on_selection_change(changed_member, lvl):
-                s_key = f"group_selections_{lvl}"
-                prev_selections = st.session_state[f"{s_key}_prev"]
-                current_selections = st.session_state[s_key]
-                new_val = st.session_state[f"select_{lvl}_{changed_member}"]
-                old_val = prev_selections[changed_member]
+            if prev_state_key not in st.session_state:
+                st.session_state[prev_state_key] = {}
+                for i, u_key in enumerate(unique_keys):
+                    initial_val = available_options[i]
+                    st.session_state[f"select_{level}_{u_key}"] = initial_val
+                    st.session_state[prev_state_key][u_key] = initial_val
+
+            def on_selection_change(u_key, lvl):
+                p_key = f"group_selections_prev_{lvl}"
+                prev_selections = st.session_state[p_key]
+
+                new_val = st.session_state[f"select_{lvl}_{u_key}"]
+                old_val = prev_selections.get(u_key)
 
                 if new_val != old_val:
-                    for other_member, val in prev_selections.items():
-                        if other_member != changed_member and val == new_val:
-                            st.session_state[f"select_{lvl}_{other_member}"] = old_val
-                            current_selections[other_member] = old_val
+                    for other_key, val in prev_selections.items():
+                        if other_key != u_key and val == new_val:
+                            st.session_state[f"select_{lvl}_{other_key}"] = old_val
+                            prev_selections[other_key] = old_val
                             break
-                    current_selections[changed_member] = new_val
-                    st.session_state[f"{s_key}_prev"] = current_selections.copy()
+                    prev_selections[u_key] = new_val
 
             for i, (idx, row) in enumerate(current_group.iterrows()):
                 name = row['이름']
-                with cols[i % cfg['g']]:
-                    st.markdown(f" **{name}**")
-                    current_val = st.session_state[state_key][name]
-                    st.selectbox("조 선택", options=available_options, index=available_options.index(current_val),
-                                 key=f"select_{level}_{name}", on_change=on_selection_change,
-                                 args=(name, level), label_visibility="collapsed",
-                                 disabled=not st.session_state.is_admin)
-            st.write("")
+                u_key = unique_keys[i]
 
-            if st.session_state.is_admin:
-                btn_col1, btn_col2 = st.columns(2)
+                with cols[i % cfg['g']]:
+                    st.markdown(f"<div style='margin-bottom: 5px; font-size: 14px;'><b>{name}</b></div>",
+                                unsafe_allow_html=True)
+
+                    st.selectbox("조 선택",
+                                 options=available_options,
+                                 key=f"select_{level}_{u_key}",
+                                 on_change=on_selection_change,
+                                 args=(u_key, level),
+                                 label_visibility="collapsed",
+                                 disabled=not is_admin)
+
+            st.markdown("<div style='margin-top: -15px;'></div>", unsafe_allow_html=True)
+
+            if is_admin:
+                btn_col1, btn_col2 = st.columns(2, gap="small")
+                is_last_group = (level == total_levels - 1)
+
                 with btn_col1:
-                    if st.button(f" 그룹 {level + 1} 랜덤 배정"):
+                    btn_text = "🎲 마지막 그룹 랜덤 배정 및 완료" if is_last_group else f"🎲 그룹 {level + 1} 랜덤 배정"
+                    if st.button(btn_text, use_container_width=True):
                         shuffled_options = available_options[:len(group_members)]
                         random.shuffle(shuffled_options)
                         for i, name in enumerate(group_members):
                             st.session_state.draw_results[name] = shuffled_options[i]
+
                         st.session_state.draw_level += 1
+
+                        if is_last_group:
+                            apply_results_to_main_df()
+
                         save_room_state(st.session_state.room_name)
-                        # st.rerun()
+                        st.rerun()
+
                 with btn_col2:
-                    if st.button(f" 그룹 {level + 1} 제비뽑기 완료 및 다음 진행", type="primary", width="stretch"):
-                        for name in group_members:
-                            st.session_state.draw_results[name] = st.session_state[f"select_{level}_{name}"]
+                    btn_text = "🎉 제비뽑기 완료 및 결과 반영" if is_last_group else f"✅ 그룹 {level + 1} 확정 및 다음"
+                    if st.button(btn_text, type="primary", use_container_width=True):
+                        for i, name in enumerate(group_members):
+                            u_key = unique_keys[i]
+                            st.session_state.draw_results[name] = st.session_state[f"select_{level}_{u_key}"]
+
                         st.session_state.draw_level += 1
+
+                        if is_last_group:
+                            apply_results_to_main_df()
+
                         save_room_state(st.session_state.room_name)
-                        # st.rerun()
+                        st.rerun()
+
+            st.markdown(
+                "<div style='margin-top: 5px; margin-bottom: 5px;'><hr style='margin: 0px; border: 1px solid #ddd;'></div>",
+                unsafe_allow_html=True)
+
+        # 3️⃣ 대기 중인 그룹
         else:
-            for i, (idx, row) in enumerate(current_group.iterrows()):
-                with cols[i % cfg['g']]:
-                    st.markdown(
-                        f"<div style='color:#999; padding:10px; border:1px dashed #ccc; border-radius:5px;'> {row['이름']} ({row['부수']}) - 대기중</div>",
-                        unsafe_allow_html=True)
-        st.divider()
+            waiting_names = [f"{row['이름']}({row['부수']})" for _, row in current_group.iterrows()]
+            st.markdown(
+                f"<div style='color:#6c757d; background-color:#f8f9fa; padding:5px 8px; border-radius:5px; margin-bottom:2px; font-size:14px;'>"
+                f"⏳ <b>그룹 {level + 1} 대기:</b> {', '.join(waiting_names)}</div>",
+                unsafe_allow_html=True)
 
-    if draw_level >= total_levels:
-        st.session_state.draw_completed = True
-        st.rerun()
-
-# 6. 세션 초기화 (Session State Initialization)
-# 앱이 처음 실행될 때 필요한 기본 변수들을 세션에 저장합니다.
-# ---------------------------------------------------------------------
-# 기본 데이터 로드 및 세션 동기화
-# ---------------------------------------------------------------------
 if 'main_df' not in st.session_state:
     st.session_state.main_df = get_sheet_template("선수명단")
 if 'cum_df' not in st.session_state:
@@ -1025,7 +1141,7 @@ else:
         st.sidebar.divider()
         st.sidebar.markdown("#### 👥 일반 접속자 관리")
         active_viewers = clean_and_get_viewers(room_name)
-        st.sidebar.info(f"현재 일반 접속자: <strong>{len(active_viewers)}명</strong> / 최대 {MAX_VIEWERS}명")
+        st.sidebar.info(f"현재 일반 접속자: **{len(active_viewers)}명** / 최대 {MAX_VIEWERS}명")
 
         if st.sidebar.button("🚨 전체 일반 사용자 강제 퇴출", type="primary", width='stretch'):
             kick_all_viewers(room_name)
@@ -1279,10 +1395,10 @@ else:
     # ---------------------------------------------------------------------
     # 메인 화면 데이터 처리 및 탭 구성
     # ---------------------------------------------------------------------
-    selected_date = st.date_input("일자 선택", datetime.now(), disabled=not is_admin)
-    CURRENT_DATE = selected_date.strftime('%Y-%m-%d')
+    # selected_date = st.date_input("일자", datetime.now(), disabled=not is_admin)
+    CURRENT_DATE = datetime.now().strftime('%Y-%m-%d')
     col_date = f"출석_{CURRENT_DATE}_{st.session_state.game_round}차전"
-
+    # responsive_text(f"📋 {CURRENT_DATE}", pc_size="16px", mobile_size="16px")
     if col_date not in st.session_state.main_df.columns:
         if '참석예정' in st.session_state.main_df.columns:
             st.session_state.main_df[col_date] = st.session_state.main_df['참석예정'].apply(
@@ -1311,7 +1427,7 @@ else:
     # ==========================================
     if tab_home is not None:
         with tab_home:
-            responsive_text(f"📋 {CURRENT_DATE}", pc_size="20px", mobile_size="16px")
+            responsive_text(f"📋 {CURRENT_DATE}", pc_size="16px", mobile_size="16px")
 
             # 원본 데이터를 건드리지 않기 위해 복사본(copy)을 만듭니다.
             df = st.session_state.main_df.copy()
@@ -1323,45 +1439,30 @@ else:
             # Fragment 호출 (이 안에서 일어나는 체크박스 클릭은 전체 코드를 재실행하지 않음)
             render_attendance_tab(df, col_date, is_admin, "")
 
-            if is_admin:
-                st.divider()
-                responsive_text(f"💾 최신 명단 다운로드", pc_size="20px", mobile_size="16px")
-                # 현재까지의 모든 데이터(출석 기록 포함)를 CSV 파일 형태로 변환합니다. (한글 깨짐 방지 utf-8-sig)
-                csv_main = st.session_state.main_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
-
-                st.download_button(
-                    label="📥 최신 명단(CSV) 다운로드",
-                    data=csv_main,
-                    file_name=f"{room_name}_최신명단_{CURRENT_DATE}.csv",
-                    mime="text/csv",
-                    type="primary",
-                    width='stretch'
-                )
-
     # ==========================================
     # 탭 2: 운영 설정
     # ==========================================
     with tab_config:
-        # 출석체크 탭에서 계산된 총 참석 인원을 파란색 정보창으로 띄워줍니다.
         # 🌟 [추가된 핵심 로직] Fragment 밖에서도 참석자 명단을 알 수 있도록 DB(main_df)에서 직접 계산합니다.
         df_temp = st.session_state.main_df
-        target_col = col_date if col_date in df_temp.columns else '참석예정'
+        # col_date가 정의되어 있지 않을 수 있으므로 get() 사용 권장 (외부에 정의되어 있다면 그대로 사용 무방)
+        target_col = col_date if 'col_date' in locals() and col_date in df_temp.columns else '참석예정'
 
-        # 'Y', '예', '참석' 등으로 표시된 사람만 필터링
-        attendees_df = df_temp[df_temp[target_col].astype(str).str.upper().isin(['Y', '예', '참석'])]
+        # 🛠️ [개선] .str.strip()을 추가하여 'Y', '예', '참석', 'Y ' 등 공백이 포함된 오타 방어
+        attendees_df = df_temp[df_temp[target_col].astype(str).str.strip().str.upper().isin(['Y', '예', '참석'])]
         attendees_count = len(attendees_df)
         live_names = ", ".join(sorted(attendees_df['이름'].tolist()))
 
-        # 출석체크 탭에서 계산된 총 참석 인원을 파란색 정보창으로 띄워줍니다.
         st.info(f"👥 현재 확정된 참석 인원: **{attendees_count}명** \n\n {live_names if live_names else '없음'}")
+
+        # 🌟 [간격 최소화] 구분선 위아래 여백을 없애기 위해 div로 감싸고 margin-bottom을 음수(-)로 설정
+        st.markdown("<div style='margin-top: 5px; margin-bottom: -60px;'><hr style='margin: 0px; border: 1px solid #ddd;'></div>", unsafe_allow_html=True)
 
         # 🌟 [수정 1] 세션에 저장된 config 데이터가 있는지 확인하고 가져옵니다.
         saved_cfg = st.session_state.get("config", {})
 
-        # 🌟 [수정 포인트 4] Bypass 로직: 설정이 확정되었으면 입력창을 숨기고 경고창 띄움
-        if st.session_state.config_confirmed:
-            st.success("✅ 운영 설정 및 조 편성이 확정되었습니다. (수정 불가 상태)")
-
+        # 🌟 [개선 후] 설정 확정 시 보여주는 요약 화면
+        if st.session_state.get("config_confirmed", False):
             # 🌟 [추가된 부분] 조당 인원수 계산 로직
             g_val_saved = saved_cfg.get('g', 4)
             if g_val_saved > 0:
@@ -1372,32 +1473,72 @@ else:
                 per_group_text = "-"
 
             st.markdown(f"""
+                ** **
                 **[현재 설정 요약]**
                 * 편성 조 수: {saved_cfg.get('g')}조 _ ** (조당 {per_group_text}) **
                 * 경기 방식: 단식 {saved_cfg.get('s_games')} / 복식 {saved_cfg.get('d_games')} (선승: {saved_cfg.get('set_count')}세트)
                 * 조 편성 방식: {saved_cfg.get('draw_method')}
                 """)
 
-            # [관리자 전용] 설정 잠금 해제 버튼
-            if is_admin:
-                st.warning("⚠️ 설정을 변경하면 현재 진행 중인 조 편성과 대진표가 모두 초기화됩니다.")
-                if st.button("🔓 설정 잠금 해제 및 다시 하기", type="secondary"):
-                    st.session_state.config_confirmed = False
-                    st.session_state.teams_generated = False
-                    st.rerun()
+            # 🌟 수정됨: vertical_alignment="center" 추가
+            col_btn, col_info = st.columns([1, 3], gap="small", vertical_alignment="center")
 
+            with col_btn:
+                if is_admin:
+                    if st.button("🔓 설정 다시 하기", use_container_width=True):
+                        reset_draw_state(reset_config=True)
+                        st.rerun()
+
+            with col_info:
+                if is_admin:
+                    # 🌟 [간격 최소화] st.warning 대신 responsive_msg 사용
+                    responsive_msg(
+                        "⚠️ 설정을 변경하면 진행 중인 조 편성과 대진표가 모두 초기화됩니다.",
+                        pc_size="14px", mobile_size="12px",
+                        bg_color="#fff3cd", text_color="#856404",
+                        gap_top="0px", gap_bottom="0px"
+                    )
         # 설정이 확정되지 않은 경우 (입력 화면)
         else:
             if is_admin:
                 # [관리자 전용] 설정 입력 폼
-                st.markdown('<div class="setting-banner">', unsafe_allow_html=True)
-                c1, c2, c3, c4, c5 = st.columns([1.2, 1.2, 1.2, 1.2, 1.5])
+                # 1. 눈에 보이지 않는 마커(marker) 역할을 하는 div를 삽입합니다.
+                st.markdown("<div class='pull-up-marker'></div>", unsafe_allow_html=True)
+
+                # 2. 마커 바로 다음에 오는 Streamlit 컨테이너(st.columns)를 통째로 위로 당기는 CSS 주입
+                st.markdown("""
+                        <style>
+                        /* pull-up-marker를 포함한 컨테이너의 '바로 다음' 컨테이너를 강제로 위로 끌어올림 */
+                        div.element-container:has(.pull-up-marker) + div.element-container {
+                            margin-top: -45px !important; /* 💡 간격이 여전히 넓다면 -60px, 겹치면 -30px로 조절하세요! */
+                        }
+                        </style>
+                    """, unsafe_allow_html=True)
+
+                # 🎨 [UI/디자인 수정] 운영 설정 탭의 5개 항목 너비 비율 조정
+                c1, c2, c3, c4, c5 = st.columns([1.2, 1.2, 1.2, 1.2, 1.5], gap="small", vertical_alignment="center")
 
                 with c1:
-                    responsive_text(f"👥 조 구성", pc_size="20px", mobile_size="16px")
-                    default_g = saved_cfg.get("g", 4)
-                    g_val = st.number_input("편성 조 수", min_value=1, max_value=20, value=default_g, disabled=not is_admin)
+                    responsive_text(f"👥 조 구성", pc_size="16px", mobile_size="14px")
+                    # 🌟 글자와 입력창 사이의 간격도 동일한 원리로 줄일 수 있습니다.
+                    st.markdown("<div class='pull-up-marker-c1'></div>", unsafe_allow_html=True)
+                    st.markdown("""
+                           <style>
+                           div.element-container:has(.pull-up-marker-c1) + div.element-container {
+                               margin-top: -15px !important;
+                           }
+                           </style>
+                       """, unsafe_allow_html=True)
 
+                    # 🛠️ [개선] 불러온 값이 min/max 범위를 벗어나 에러가 나는 것을 방지
+                    default_g = max(1, min(20, saved_cfg.get("g", 4)))
+                    # 참석자가 0명이면 max_value가 1이 되도록 방어 (Streamlit 에러 방지)
+                    max_groups = max(1, attendees_count)
+                    safe_default_g = min(default_g, max_groups)
+
+                    # 🌟 [핵심 수정 1] key="g_val_input" 추가 (제비뽑기 화면과 연동)
+                    g_val = st.number_input("편성 조 수", min_value=1, max_value=max_groups, value=safe_default_g,
+                                            disabled=not is_admin, key="g_val_input")
                     if g_val > 0:
                         avg = attendees_count // g_val  # 몫: 한 조에 들어갈 기본 인원
                         rem = attendees_count % g_val  # 나머지: 남는 인원
@@ -1409,7 +1550,14 @@ else:
                             st.info(f"👉 조당 {avg}명 배정")
 
                 with c2:
-                    responsive_text(f"🎾 경기 규칙", pc_size="20px", mobile_size="16px")
+                    responsive_text(f"🎾 경기 규칙", pc_size="16px", mobile_size="14px")
+                    # 🌟 글자와 입력창 사이 간격 줄이기
+                    st.markdown("<div class='pull-up-marker-c2'></div>", unsafe_allow_html=True)
+                    st.markdown(
+                        """<style>div.element-container:has(.pull-up-marker-c2) + div.element-container { margin-top: -15px !important; }</style>""",
+                        unsafe_allow_html=True)
+
+                    # v_space(5)
                     # 주석을 해제하여 변수가 정상적으로 할당되도록 수정
                     default_s_g = saved_cfg.get("s_games", 2)
                     default_d_g = saved_cfg.get("d_games", 1)
@@ -1424,64 +1572,173 @@ else:
                                              "set_count", 3) in set_options else 1)
 
                 with c3:
-                    responsive_text(f"⚙️ 환경 설정", pc_size="20px", mobile_size="16px")
+                    responsive_text(f"⚙️ 환경 설정", pc_size="16px", mobile_size="14px")
+                    # 🌟 글자와 입력창 사이 간격 줄이기
+                    st.markdown("<div class='pull-up-marker-c3'></div>", unsafe_allow_html=True)
+                    st.markdown(
+                        """<style>div.element-container:has(.pull-up-marker-c3) + div.element-container { margin-top: -15px !important; }</style>""",
+                        unsafe_allow_html=True)
+
+                    # v_space(5)
                     # 🌟 [수정 4] 테이블 번호 이전 설정값 불러오기
                     default_t = saved_cfg.get("t", 3)
                     t_val = st.number_input("Table_No.", min_value=1, max_value=20, value=default_t, disabled=not is_admin)
 
                 with c4:
-                    responsive_text(f"🎲 방식", pc_size="20px", mobile_size="16px")
+                    responsive_text(f"🎲 방식", pc_size="16px", mobile_size="14px")
+                    # 🌟 글자와 입력창 사이 간격 줄이기
+                    st.markdown("<div class='pull-up-marker-c4'></div>", unsafe_allow_html=True)
+                    st.markdown(
+                        """<style>div.element-container:has(.pull-up-marker-c4) + div.element-container { margin-top: -15px !important; }</style>""",
+                        unsafe_allow_html=True)
+
+                    # v_space(5)
                     # 🌟 [수정 5] 조 편성 방식 이전 설정값 불러오기
                     default_draw = saved_cfg.get("draw_method", "AI 선정")
                     draw_options = ["AI 선정", "제비뽑기", "조편성_신청"]
                     draw_index = draw_options.index(default_draw) if default_draw in draw_options else 0
 
                     draw_method = st.radio("방식", options=draw_options, index=draw_index, label_visibility="collapsed",
-                                           disabled=not is_admin)
+                                           disabled=not is_admin, key="draw_method_radio")
 
                 with c5:
-                    responsive_text(f"✅ 실행", pc_size="20px", mobile_size="16px")
-                    if st.button("설정 확정 및 편성 시작", type="primary", width='stretch'):
-                        st.session_state.config = {
-                            "g": g_val, "t": t_val, "s_games": s_g, "d_games": d_g, "set_count": set_c,
-                            "total_g": s_g + d_g, "draw_method": draw_method,
-                            "tie_breakers": {name: round(random.random(), 3) for name in st.session_state.main_df['이름']}
-                        }
-                        st.session_state.config_confirmed = True
-                        st.session_state.teams_generated = False
-                        save_room_state(st.session_state.room_name)
-                        st.rerun()
+                    responsive_text(f"✅ 실행", pc_size="16px", mobile_size="14px")
+                    # 🌟 글자와 버튼 사이 간격 줄이기
+                    st.markdown("<div class='pull-up-marker-c5'></div>", unsafe_allow_html=True)
+                    st.markdown(
+                        """<style>div.element-container:has(.pull-up-marker-c5) + div.element-container { margin-top: -15px !important; }</style>""",
+                        unsafe_allow_html=True)
+
+                    # 💡 [간격 조절]
+                    v_space(28)
+
+                    # 참석자가 0명이면 버튼 비활성화 및 경고 문구 출력
+                    is_empty_attendees = (attendees_count == 0)
+
+                    # if st.button("설정 확정 및 편성 시작", type="primary", width='stretch'):
+                    if st.button("설정 확정 및 편성 시작", type="primary", use_container_width=True, disabled=is_empty_attendees):
+                        if draw_method == '제비뽑기' and not st.session_state.get('draw_completed', False):
+                            st.error("⚠️ 아래의 제비뽑기를 모두 완료한 후 이 버튼을 눌러주세요.")
+                        else:
+                            st.session_state.config = {
+                                "g": g_val, "t": t_val, "s_games": s_g, "d_games": d_g, "set_count": set_c,
+                                "total_g": s_g + d_g, "draw_method": draw_method,
+                                "tie_breakers": {idx: round(random.random(), 3) for idx in st.session_state.main_df.index}
+                            }
+                            st.session_state.config_confirmed = True
+                            st.session_state.teams_generated = False
+                            save_room_state(st.session_state.room_name)
+                            st.toast("✅ 설정이 성공적으로 저장되었습니다!", icon="🎉")
+                            time.sleep(0.5)
+                            st.rerun()
+
+                    if is_empty_attendees:
+                        st.error("참석자가 없어 편성을 시작할 수 없습니다.")
                 st.markdown('</div>', unsafe_allow_html=True)
+
             else:
                 # [일반 사용자] 관리자가 설정 중일 때 안내 메시지
                 st.info("⏳ 관리자가 대회 운영 설정을 진행하고 있습니다. 잠시만 기다려주세요.")
 
-        # 제비뽑기 로직 (Fragment 호출)
-        if "config" in st.session_state and st.session_state.config.get('draw_method') == '제비뽑기':
-            if not st.session_state.get('draw_completed', False):
-                st.divider()
-                cfg = st.session_state.config
-                df = st.session_state.main_df
-                attendees = df[df[col_date] == 'Y'].copy()
-                attendees['부수_숫자'] = attendees['부수'].apply(extract_busu)
-                attendees['Random'] = attendees['이름'].map(cfg['tie_breakers'])
-                sorted_members = attendees.sort_values(['부수_숫자', 'Random'], ascending=True).reset_index(drop=True)
-                total_levels = math.ceil(len(sorted_members) / cfg['g'])
-                draw_level = st.session_state.get('draw_level', 0)
+        # 🌟 [핵심 수정 4] 확정 버튼을 누르기 전이라도 라디오 버튼에서 '제비뽑기'를 선택하면 즉시 화면이 나타나도록 수정
+        current_draw_method = "AI 선정"
+        cfg_for_draw = {}
 
-                responsive_text(f"📋 제비뽑기 진행 현황", pc_size="20px", mobile_size="16px")
-                render_draw_process(cfg, sorted_members, total_levels, draw_level)
-            else:
-                st.divider()
-                st.success("✅ 제비뽑기가 모두 완료되었습니다! 상단의 <strong>'조 편성 결과'</strong> 탭으로 이동하여 결과를 확인해주세요.")
-                if is_admin and not st.session_state.config_confirmed:
-                    if st.button("🔄 제비뽑기 다시 하기", type="secondary"):
+        if st.session_state.get("config_confirmed", False):
+            current_draw_method = saved_cfg.get("draw_method", "AI 선정")
+            cfg_for_draw = st.session_state.config
+        else:
+            if is_admin:
+                current_draw_method = st.session_state.get("draw_method_radio", "AI 선정")
+                cfg_for_draw = {
+                    'g': st.session_state.get("g_val_input", 4),
+                    'tie_breakers': {idx: round(random.random(), 3) for idx in st.session_state.main_df.index}
+                }
+
+        if current_draw_method == '제비뽑기':
+            if not st.session_state.get('draw_completed', False):
+                # 🌟 [간격 최소화] 설정 영역과 제비뽑기 영역 사이의 선 간격 최소화
+                st.markdown(
+                    "<div style='margin-top: 10px; margin-bottom: -10px;'><hr style='margin: 0px; border: 1px solid #ddd;'></div>",
+                    unsafe_allow_html=True)
+
+                cfg = cfg_for_draw
+                attendees = attendees_df.copy()
+
+                if attendees.empty:
+                    st.warning("해당 일자에 참석으로 체크된 인원이 없습니다.")
+                else:
+                    # 🛠️ [수정 2] 결측치(NaN) 방어 코드 추가
+                    # 🚀 [수정] 캐싱된 함수를 사용하여 불필요한 연산 방지 및 복합키 적용
+                    tie_breakers = cfg.get('tie_breakers', {})
+                    sorted_members = prepare_draw_data(attendees_df, tie_breakers)
+
+                    # 레벨(그룹) 분할 계산 (요청에 따라 group_size 변수명 유지)
+                    group_size = cfg.get('g', 1)
+                    group_size = group_size if group_size > 0 else 1
+                    total_levels = math.ceil(len(sorted_members) / group_size)
+
+                    # 🌟 [에러 해결] 앱 최초 실행 시 draw_results 저장 공간 초기화 (적용 완료 ✅)
+                    if 'draw_level' not in st.session_state:
                         st.session_state.draw_level = 0
+
+                    if 'draw_results' not in st.session_state:
                         st.session_state.draw_results = {}
-                        st.session_state.draw_completed = False
-                        for key in list(st.session_state.keys()):
-                            if key.startswith("group_selections_") or key.startswith("select_"):
-                                del st.session_state[key]
+
+                    responsive_text(f"📋 제비뽑기 진행 현황", pc_size="16px", mobile_size="14px")
+                    current_level = st.session_state.draw_level
+                    # 🎉 [추가] 진행률 바(Progress Bar) 시각적 피드백
+                    progress_percent = min(current_level / total_levels, 1.0) if total_levels > 0 else 1.0
+
+                    # 🌟 [간격 최소화] 프로그레스 바 아래 여백을 줄이기 위한 CSS 트릭
+                    st.markdown("<div style='margin-bottom: -15px;'></div>", unsafe_allow_html=True)
+                    st.progress(progress_percent, text=f"제비뽑기 진행률: {int(progress_percent * 100)}%")
+
+                    # 🛡️ [추가] Try-Except로 크래시 우아하게 방어
+                    try:
+                        render_draw_process(cfg, sorted_members, total_levels, current_level)
+
+                        # 💾 [추가] 완료 시 자동 저장 및 축하 효과
+                        if current_level >= total_levels:
+                            st.session_state.draw_completed = True
+                            save_room_state(st.session_state.room_name)  # 자동 저장
+
+                            if not st.session_state.get('balloons_shown', False):
+                                st.balloons()
+                                st.session_state.balloons_shown = True
+
+                            st.rerun()  # 상태 업데이트 후 완료 화면으로 전환
+
+                    except Exception as e:
+                        st.error("🚨 제비뽑기 처리 중 예상치 못한 문제가 발생했습니다. 데이터를 확인해 주세요.")
+                        if is_admin:
+                            with st.expander("에러 상세 내용 보기"):
+                                st.code(str(e))
+                        if st.button("🔄 제비뽑기 초기화 및 다시 시도"):
+                            # 🌟 [적용 1] 에러 발생 시 초기화도 함수로 깔끔하게 처리
+                            reset_draw_state(reset_config=False)
+                            st.rerun()
+
+            else:
+                st.markdown(
+                    "<div style='margin-top: 5px; margin-bottom: -10px;'><hr style='margin: 0px; border: 1px solid #ddd;'></div>",
+                    unsafe_allow_html=True)
+
+                is_config_confirmed = st.session_state.get('config_confirmed', False)
+
+                # 🌟 [핵심 수정 5] 완료 후 안내 메시지 분기 처리 (버튼을 누르도록 명확히 안내)
+                if not is_config_confirmed:
+                    responsive_msg("✅ 제비뽑기가 모두 완료되었습니다! 위의 '설정 확정 및 편성 시작' 버튼을 눌러주세요.", pc_size="14px", mobile_size="12px",
+                                   bg_color="#d1e7dd", text_color="#0f5132", gap_top="10px", gap_bottom="10px")
+                else:
+                    responsive_msg("✅ 제비뽑기가 모두 완료되어 조 편성이 확정되었습니다! 대진표 탭에서 결과를 확인하세요.", pc_size="14px", mobile_size="12px",
+                                   bg_color="#d1e7dd", text_color="#0f5132", gap_top="10px", gap_bottom="10px")
+
+                if is_admin and not is_config_confirmed:
+                    if st.button("🔄 제비뽑기 다시 하기", type="secondary"):
+                        # 🌟 [적용 1] 제비뽑기 다시 하기도 함수 한 줄로 깔끔하게 처리
+                        reset_draw_state(reset_config=False)
+
                         save_room_state(st.session_state.room_name)
                         st.rerun()
 
@@ -1554,8 +1811,10 @@ else:
             teams = st.session_state.teams
             team_stats = st.session_state.team_stats
 
-            responsive_text(f"📋 조별 최종 구성 및 부수 합계", pc_size="20px", mobile_size="16px")
+            responsive_text(f"📋 조별 최종 구성 및 부수 합계", pc_size="16px", mobile_size="14px")
             valid_teams = [t_num for t_num in range(1, cfg['g'] + 1) if teams[t_num]]
+
+            # 🎨 [UI/디자인 수정] 조 편성 결과 카드를 한 줄에 몇 개씩 보여줄지 결정 (현재 최대 5개)
             num_cols = min(len(valid_teams), 5)
 
             if num_cols > 0:
@@ -1571,6 +1830,9 @@ else:
                                 team_sum=int(team_stats[t_num]['sum']), members_html=members_html
                             )
                             st.markdown(card_html, unsafe_allow_html=True)
+                    # 👇 [추가된 부분] 한 줄(최대 5개) 출력이 끝난 후 세로 간격(gap) 추가
+                    st.markdown("<div style='margin-bottom: 30px;'></div>", unsafe_allow_html=True)
+                    # (30px 숫자를 조절하여 원하는 만큼 간격을 넓히거나 좁힐 수 있습니다.)
 
             if st.session_state.get('matrix') is None or list(st.session_state.matrix.index) != st.session_state.labels:
                 st.session_state.matrix = pd.DataFrame(np.nan, index=st.session_state.labels,
@@ -1674,18 +1936,23 @@ else:
                 df_left = df_match.iloc[:mid_idx].reset_index(drop=True)
                 df_right = df_match.iloc[mid_idx:].reset_index(drop=True)
 
-                col_title, col_info = st.columns([3, 7])
+                # 🎨 [UI/디자인 수정] 경기 배정표 상단 제목과 안내문구의 좌우 비율 (3:7), 간격 좁게, 수직 중앙 정렬
+                col_title, col_info = st.columns([1, 7], gap="small", vertical_alignment="center")
+
                 with col_title:
                     # st.markdown("### 경기 배정표")
-                    responsive_text(f"📋 경기 배정표", pc_size="20px", mobile_size="16px")
+                    responsive_text(f"📋 경기 배정표", pc_size="16px", mobile_size="14px")
                 with col_info:
-                    st.info(" **행을 클릭**하면 상세 결과 입력창이 나타납니다.")
+                    # 👇 [수정] st.info 대신 responsive_msg() 함수 사용
+                    responsive_msg("ℹ️ **행을 클릭**하면 상세 결과 입력창이 나타납니다.", pc_size="14px", mobile_size="12px")
 
+                # 🎨 [UI/디자인 수정] 경기 배정표 좌/우 표의 비율 (1:1)
                 col1, col2 = st.columns(2)
                 with col1:
                     # on_select="rerun": 표의 특정 줄을 클릭하면 화면이 새로고침되면서 클릭한 정보를 가져옵니다.
                     event_left = st.dataframe(df_left.style.apply(highlight_finished, axis=1),
                                               width="stretch",
+                                              height=300,  # 👈 [추가] 표의 높이를 400px로 고정 (원하는 숫자로 변경 가능)
                                               hide_index=True,
                                               on_select="rerun",
                                               selection_mode="single-row"
@@ -1693,6 +1960,7 @@ else:
                 with col2:
                     event_right = st.dataframe(df_right.style.apply(highlight_finished, axis=1),
                                                width="stretch",
+                                               height=300,  # 👈 [추가] 표의 높이를 400px로 고정 (원하는 숫자로 변경 가능)
                                                hide_index=True,
                                                on_select="rerun",
                                                selection_mode="single-row") if not df_right.empty else None
@@ -1705,29 +1973,63 @@ else:
                 elif event_right and event_right.selection.rows:
                     selected_match_idx = event_right.selection.rows[0] + mid_idx
 
-                # 🌟 [개선 2] 상세 결과 입력창을 Fragment로 분리하여 입력 중 전체 화면 지연 방지
+                # 🌟 [추가] 상세 경기 UI 상태를 저장할 세션 딕셔너리 초기화 (모바일 튕김 방지 및 UI 복구용)
+                if 'match_details' not in st.session_state:
+                    st.session_state.match_details = {}
+
                 @st.fragment
                 def render_match_details(m_idx, team_a, team_b):
-                    st.divider()
+                    # 👇 [수정] st.divider() 대신 HTML <hr> 태그를 사용하여 위아래 간격을 대폭 줄임
+                    st.markdown(
+                        "<hr style='margin-top: 5px; margin-bottom: 15px; border: 0; border-top: 1px solid rgba(128, 128, 128, 0.2);'>",
+                        unsafe_allow_html=True)
+
                     # st.markdown(f"### 🎯 {team_a} VS {team_b} 상세 결과 입력")
-                    responsive_text(f"🎯 {team_a} VS {team_b} 상세 결과 입력", pc_size="20px", mobile_size="16px")
+                    responsive_text(f"🎯 {team_a} VS {team_b} 상세 결과 입력", pc_size="16px", mobile_size="14px")
 
                     if not is_admin:
                         st.warning("🔒 관리자 비밀번호를 입력해주세요.")
                         return
 
+                    # 🌟 [추가] 리스트에서 특정 값의 인덱스를 안전하게 찾는 헬퍼 함수
+                    def get_idx(lst, val, default=0):
+                        return lst.index(val) if val in lst else default
+
                     if is_ind:
                         # 🌟 [개선 3] 개인전은 st.form으로 묶어서 클릭 지연 완벽 제거
                         with st.form(key=f"form_ind_{m_idx}"):
-                            c1, c2, c3, c4, c5 = st.columns([1.5, 1.5, 2.5, 1.5, 1.5])
-                            with c1: st.markdown(f"<div style='text-align:center;'>{team_a}</div>", unsafe_allow_html=True)
-                            with c2: res_type = st.radio(f"결과", ["승", "패"], horizontal=True)
+                            # 🎨 [UI/디자인 수정] 개인전 상세 결과 입력창의 좌우 비율 조정
+                            # 간격은 'medium'으로 띄우고, 위아래 높낮이는 '가운데 정렬'로 맞추는 완벽한 세팅
+                            c1, c2, c3, c4, c5 = st.columns([1.5, 1.5, 2.5, 1.5, 1.5], gap="medium", vertical_alignment="center")
+
+                            # 🌟 [수정] 기존에 저장된 점수가 있는지 확인하고 불러오기
+                            sa = st.session_state.matrix.loc[team_a, team_b]
+                            sb = st.session_state.matrix.loc[team_b, team_a]
+                            is_saved = pd.notna(sa) and pd.notna(sb)
+
+                            if is_saved:
+                                saved_res = "승" if sa > sb else "패"
+                                saved_score = f"{int(sa)}:{int(sb)}"
+                            else:
+                                saved_res = "승"
+                                saved_score = f"{set_rule}:0"
+
+                            with c1:
+                                st.markdown(f"<div style='text-align:center;'>{team_a}</div>", unsafe_allow_html=True)
+
+                            # 🌟 [수정] 불러온 값을 index로 설정
+                            with c2:
+                                res_idx = 0 if saved_res == "승" else 1
+                                res_type = st.radio(f"결과", ["승", "패"], horizontal=True, index=res_idx)
+
                             with c3:
-                                scores = [f"{set_rule}:{i}" for i in range(set_rule)] if res_type == "승" else [f"{i}:{set_rule}"
-                                                                                                               for i in
-                                                                                                               range(set_rule)]
-                                selected_score = st.radio("스코어", scores, horizontal=True)
-                            with c4: st.markdown(f"<div style='text-align:center;'>{team_b}</div>", unsafe_allow_html=True)
+                                scores = [f"{set_rule}:{i}" for i in range(set_rule)] if res_type == "승" else [
+                                    f"{i}:{set_rule}" for i in range(set_rule)]
+                                score_idx = get_idx(scores, saved_score)
+                                selected_score = st.radio("스코어", scores, horizontal=True, index=score_idx)
+
+                            with c4:
+                                st.markdown(f"<div style='text-align:center;'>{team_b}</div>", unsafe_allow_html=True)
                             with c5:
                                 submit_ind = st.form_submit_button("결과 저장", type="primary", use_container_width=True)
 
@@ -1771,84 +2073,143 @@ else:
                         set_win_scores = [f"{set_limit}:{i}" for i in range(set_limit)]
                         set_lose_scores = [f"{i}:{set_limit}" for i in range(set_limit)]
 
+                        # 🌟 [추가] 현재 경기의 이전 저장 데이터 불러오기
+                        saved_match_data = st.session_state.match_details.get(m_idx, {'s': {}, 'd': {}})
+
                         if s_games > 0:
-                            st.markdown("#### 👤 단식 경기")
+                            # st.markdown("##### 👤 단식 경기")
+                            responsive_text(f"👥 단식 경기", pc_size="16px", mobile_size="16px")
                             for s in range(s_games):
-                                c1, c2, c3, c4, c5 = st.columns([1, 2.5, 1.5, 2.5, 2.5])
+                                # 🌟 [추가] 단식 이전 데이터 로드
+                                prev_s = saved_match_data['s'].get(s, {"pa": "선택안함", "pb": "선택안함", "res": "승",
+                                                                       "sc": f"{set_limit}:0"})
+
+                                # 🎨 [UI/디자인 수정] 단식 경기 입력창의 좌우 비율 조정 (순서, A팀, 결과, 점수, B팀)
+                                c1, c2, c3, c4, c5 = st.columns([1, 2.5, 1.5, 2.5, 2.5], gap="medium", vertical_alignment="center")
                                 ka, kb = f"m{m_idx}_s_pa_{s}", f"m{m_idx}_s_pb_{s}"
                                 with c1: st.write(f"단식 {s + 1}")
-                                with c2: p_a = st.selectbox(f"A팀", get_avail_single(team_a_players, ka), key=ka,
-                                                            label_visibility="collapsed")
-                                with c3: res = st.radio("결과", ["승", "패"], horizontal=True, key=f"m{m_idx}_s_res_{s}",
-                                                        label_visibility="collapsed")
-                                with c4:
-                                    sc = st.radio("점수", set_win_scores if res == "승" else set_lose_scores, horizontal=True,
-                                                  key=f"m{m_idx}_s_sc_{s}", label_visibility="collapsed")
-                                    s_a, s_b = map(int, sc.split(':'))
-                                with c5: p_b = st.selectbox(f"B팀", get_avail_single(team_b_players, kb), key=kb,
-                                                            label_visibility="collapsed")
-                                match_results.append(("S", p_a, s_a, s_b, p_b))
-                        st.write("")
-
-                        if d_games > 0:
-                            responsive_text(f"👥 복식 경기", pc_size="20px", mobile_size="16px")
-                            for d in range(d_games):
-                                c1, c2, c3, c4, c5 = st.columns([1, 2.5, 1.5, 2.5, 2.5])
-                                ka1, ka2 = f"m{m_idx}_d_pa1_{d}", f"m{m_idx}_d_pa2_{d}"
-                                kb1, kb2 = f"m{m_idx}_d_pb1_{d}", f"m{m_idx}_d_pb2_{d}"
-                                with c1: st.write(f"복식 {d + 1}")
                                 with c2:
-                                    p_a1 = st.selectbox(f"A1", get_avail_double(team_a_players, ka1), key=ka1,
-                                                        label_visibility="collapsed")
-                                    p_a2 = st.selectbox(f"A2", get_avail_double(team_a_players, ka2), key=ka2,
-                                                        label_visibility="collapsed")
-                                with c3: res = st.radio("결과", ["승", "패"], horizontal=True, key=f"m{m_idx}_d_res_{d}",
-                                                        label_visibility="collapsed")
+                                    avail_a = get_avail_single(team_a_players, ka)
+                                    p_a = st.selectbox(f"A팀", avail_a, index=get_idx(avail_a, prev_s["pa"]), key=ka,
+                                                       label_visibility="collapsed")
+                                with c3:
+                                    res = st.radio("결과", ["승", "패"], horizontal=True,
+                                                   index=0 if prev_s["res"] == "승" else 1, key=f"m{m_idx}_s_res_{s}",
+                                                   label_visibility="collapsed")
                                 with c4:
-                                    sc = st.radio("점수", set_win_scores if res == "승" else set_lose_scores, horizontal=True,
-                                                  key=f"m{m_idx}_d_sc_{d}", label_visibility="collapsed")
+                                    scores_list = set_win_scores if res == "승" else set_lose_scores
+                                    sc = st.radio("점수", scores_list, horizontal=True,
+                                                  index=get_idx(scores_list, prev_s["sc"]), key=f"m{m_idx}_s_sc_{s}",
+                                                  label_visibility="collapsed")
                                     s_a, s_b = map(int, sc.split(':'))
                                 with c5:
-                                    p_b1 = st.selectbox(f"B1", get_avail_double(team_b_players, kb1), key=kb1,
-                                                        label_visibility="collapsed")
-                                    p_b2 = st.selectbox(f"B2", get_avail_double(team_b_players, kb2), key=kb2,
-                                                        label_visibility="collapsed")
+                                    avail_b = get_avail_single(team_b_players, kb)
+                                    p_b = st.selectbox(f"B팀", avail_b, index=get_idx(avail_b, prev_s["pb"]), key=kb,
+                                                       label_visibility="collapsed")
+
+                                match_results.append(("S", p_a, s_a, s_b, p_b))
+                        st.write("")  # 🎨 [UI/디자인 수정] 단식과 복식 사이 상하 여백
+
+                        if d_games > 0:
+                            responsive_text(f"👥 복식 경기", pc_size="16px", mobile_size="16px")
+                            for d in range(d_games):
+                                # 🌟 [추가] 복식 이전 데이터 로드
+                                prev_d = saved_match_data['d'].get(d, {"pa1": "선택안함", "pa2": "선택안함", "pb1": "선택안함",
+                                                                       "pb2": "선택안함", "res": "승",
+                                                                       "sc": f"{set_limit}:0"})
+
+                                # 🎨 [UI/디자인 수정] 복식 경기 입력창의 좌우 비율 조정
+                                c1, c2, c3, c4, c5 = st.columns([1, 2.5, 1.5, 2.5, 2.5], gap="medium", vertical_alignment="center")
+                                ka1, ka2 = f"m{m_idx}_d_pa1_{d}", f"m{m_idx}_d_pa2_{d}"
+                                kb1, kb2 = f"m{m_idx}_d_pb1_{d}", f"m{m_idx}_d_pb2_{d}"
+
+                                with c1: st.write(f"복식 {d + 1}")
+                                with c2:
+                                    avail_a1 = get_avail_double(team_a_players, ka1)
+                                    p_a1 = st.selectbox(f"A1", avail_a1, index=get_idx(avail_a1, prev_d["pa1"]),
+                                                        key=ka1, label_visibility="collapsed")
+                                    avail_a2 = get_avail_double(team_a_players, ka2)
+                                    p_a2 = st.selectbox(f"A2", avail_a2, index=get_idx(avail_a2, prev_d["pa2"]),
+                                                        key=ka2, label_visibility="collapsed")
+                                with c3:
+                                    res = st.radio("결과", ["승", "패"], horizontal=True,
+                                                   index=0 if prev_d["res"] == "승" else 1, key=f"m{m_idx}_d_res_{d}",
+                                                   label_visibility="collapsed")
+                                with c4:
+                                    scores_list = set_win_scores if res == "승" else set_lose_scores
+                                    sc = st.radio("점수", scores_list, horizontal=True,
+                                                  index=get_idx(scores_list, prev_d["sc"]), key=f"m{m_idx}_d_sc_{d}",
+                                                  label_visibility="collapsed")
+                                    s_a, s_b = map(int, sc.split(':'))
+                                with c5:
+                                    avail_b1 = get_avail_double(team_b_players, kb1)
+                                    p_b1 = st.selectbox(f"B1", avail_b1, index=get_idx(avail_b1, prev_d["pb1"]),
+                                                        key=kb1, label_visibility="collapsed")
+                                    avail_b2 = get_avail_double(team_b_players, kb2)
+                                    p_b2 = st.selectbox(f"B2", avail_b2, index=get_idx(avail_b2, prev_d["pb2"]),
+                                                        key=kb2, label_visibility="collapsed")
+
                                 match_results.append(("D", (p_a1, p_a2), s_a, s_b, (p_b1, p_b2)))
+                        # 🎨 [UI/디자인 수정] 좌우 여백(25%)을 주고 가운데(50%)에만 버튼 배치 (1:2:1 비율)
+                        col_btn, col_empty1, col_empty2 = st.columns([9, 1, 1])
 
-                        if st.button("💾 상세 결과 저장", type="primary", width='stretch'):
-                            aw, bw = 0, 0
-                            set_score_a, set_score_b = 0, 0
-                            for res in match_results:
-                                if res[0] == "S":
-                                    _, pa, sa, sb, pb = res
-                                    if pa != "선택안함" and pb != "선택안함":
-                                        st.session_state.ind_matrix.loc[pa, pb] = sa
-                                        st.session_state.ind_matrix.loc[pb, pa] = sb
-                                        update_cumulative_record(pa, pb, sa, sb)
-                                    if sa > sb:
-                                        aw += 1
-                                    elif sb > sa:
-                                        bw += 1
-                                    set_score_a, set_score_b = sa, sb
-                                else:
-                                    _, _, sa, sb, _ = res
-                                    if sa > sb:
-                                        aw += 1
-                                    elif sb > sa:
-                                        bw += 1
-                                    set_score_a, set_score_b = sa, sb
+                        with col_btn:
+                            # 👇 width='stretch' 대신 use_container_width=True 사용
+                            if st.button("💾 상세 결과 저장", type="primary", use_container_width=True):
+                                # 🌟 [추가] 1. UI 상태(선택한 선수, 결과, 점수)를 세션에 저장 (초기화 방지용)
+                                ui_state = {'s': {}, 'd': {}}
+                                for s in range(s_games):
+                                    ui_state['s'][s] = {
+                                        "pa": st.session_state[f"m{m_idx}_s_pa_{s}"],
+                                        "pb": st.session_state[f"m{m_idx}_s_pb_{s}"],
+                                        "res": st.session_state[f"m{m_idx}_s_res_{s}"],
+                                        "sc": st.session_state[f"m{m_idx}_s_sc_{s}"]
+                                    }
+                                for d in range(d_games):
+                                    ui_state['d'][d] = {
+                                        "pa1": st.session_state[f"m{m_idx}_d_pa1_{d}"],
+                                        "pa2": st.session_state[f"m{m_idx}_d_pa2_{d}"],
+                                        "pb1": st.session_state[f"m{m_idx}_d_pb1_{d}"],
+                                        "pb2": st.session_state[f"m{m_idx}_d_pb2_{d}"],
+                                        "res": st.session_state[f"m{m_idx}_d_res_{d}"],
+                                        "sc": st.session_state[f"m{m_idx}_d_sc_{d}"]
+                                    }
+                                st.session_state.match_details[m_idx] = ui_state
 
-                                if is_single_or_double_one_game:
-                                    st.session_state.matrix.loc[team_a, team_b] = set_score_a
-                                    st.session_state.matrix.loc[team_b, team_a] = set_score_b
-                                else:
-                                    st.session_state.matrix.loc[team_a, team_b] = aw
-                                    st.session_state.matrix.loc[team_b, team_a] = bw
+                                # 2. 실제 점수 매트릭스 업데이트
+                                aw, bw = 0, 0
+                                set_score_a, set_score_b = 0, 0
+                                for res in match_results:
+                                    if res[0] == "S":
+                                        _, pa, sa, sb, pb = res
+                                        if pa != "선택안함" and pb != "선택안함":
+                                            st.session_state.ind_matrix.loc[pa, pb] = sa
+                                            st.session_state.ind_matrix.loc[pb, pa] = sb
+                                            update_cumulative_record(pa, pb, sa, sb)
+                                        if sa > sb:
+                                            aw += 1
+                                        elif sb > sa:
+                                            bw += 1
+                                        set_score_a, set_score_b = sa, sb
+                                    else:
+                                        _, _, sa, sb, _ = res
+                                        if sa > sb:
+                                            aw += 1
+                                        elif sb > sa:
+                                            bw += 1
+                                        set_score_a, set_score_b = sa, sb
 
-                            save_room_state(st.session_state.room_name)
-                            st.session_state.show_success_msg = "상세 결과가 저장되었습니다!"
-                            st.rerun()
+                                    if is_single_or_double_one_game:
+                                        st.session_state.matrix.loc[team_a, team_b] = set_score_a
+                                        st.session_state.matrix.loc[team_b, team_a] = set_score_b
+                                    else:
+                                        st.session_state.matrix.loc[team_a, team_b] = aw
+                                        st.session_state.matrix.loc[team_b, team_a] = bw
 
+                                # 🌟 [중요] save_room_state 함수 내부에서 st.session_state.match_details 도 함께 저장됨
+                                save_room_state(st.session_state.room_name)
+                                st.session_state.show_success_msg = "상세 결과가 저장되었습니다!"
+                                st.rerun()
                 if selected_match_idx is not None:
                     team_a, team_b = all_matches[selected_match_idx]
                     render_match_details(selected_match_idx, team_a, team_b)
@@ -1860,10 +2221,15 @@ else:
     # 탭 5: 스코어보드 (공통 조회 / 관리자 수정)
     # ---------------------------------------------------------------------
     with tab_score:
+        # 💡 [간격 조절] 탭 메뉴와 아래 내용 사이의 상단 여백
+        # v_space(5)
+
         # [관리자 전용] 리그 히스토리 관리
         if is_admin:
             with st.expander("💾 리그 데이터 저장 및 불러오기 (일자별 관리)", expanded=False):
-                col_save, col_load = st.columns(2)
+                # 🎨 [UI/디자인 수정] 저장/불러오기 영역 좌우 비율 (1:1)
+                # 💡 [좌우 간격 조절] gap="medium" 또는 "large"로 양쪽 영역 간격 조절 가능
+                col_save, col_load = st.columns(2, gap="medium")
                 current_room = st.session_state.get('room_name', '리그')
 
                 with col_save:
@@ -1872,6 +2238,8 @@ else:
                     save_title = st.text_input("저장할 리그명/일자 입력", value=f"[{current_room}] {now_str} 저장본")
                     has_data_to_save = 'labels' in st.session_state and st.session_state.get('matrix') is not None
 
+                    st.markdown("<div style='margin-top: -40px;'></div>", unsafe_allow_html=True)
+                    # v_space(0)  # 💡 [간격 조절] 입력창과 버튼 사이
                     if st.button("현재 상태 저장하기", type="primary", use_container_width=True, disabled=not has_data_to_save):
                         current_matrix = st.session_state.matrix
                         ind_matrix_to_save = st.session_state.get('ind_matrix', None)
@@ -1897,7 +2265,7 @@ else:
                             st.rerun()
 
                 with col_load:
-                    st.markdown("##### <strong>과거 결과 불러오기 (로드)</strong>")
+                    st.markdown("##### **과거 결과 불러오기 (로드)**")
                     all_saved_keys = get_history_keys()
                     room_saved_keys = [key for key in all_saved_keys if f"[{current_room}]" in key]
 
@@ -1912,7 +2280,11 @@ else:
                                 st.error("데이터 로드에 실패했습니다.")
                     else:
                         st.info("현재 방에 저장된 과거 리그 내역이 없습니다.")
-            st.divider()
+
+            # 💡 [간격 조절] 히스토리 관리창과 아래 스코어보드 사이의 간격
+            v_space(15)
+            st.markdown("<hr style='margin: 0px; border: 1px solid #ddd;'>", unsafe_allow_html=True)
+            v_space(15)
 
         # [공통] 스코어보드 렌더링
         if 'labels' in st.session_state and st.session_state.get('matrix') is not None:
@@ -1973,7 +2345,7 @@ else:
 
                 # [관리자 전용] 편집 모드
                 if editable and is_admin:
-                    st.info("💡 <strong>아래 표의 대결 셀(Cell)을 더블 클릭</strong>하여 세트 스코어(점수)를 입력한 뒤, 하단의 **[변경사항 적용]** 버튼을 눌러주세요.")
+                    st.info("💡 아래 표의 대결 셀(Cell)을 더블 클릭하여 세트 스코어(점수)를 입력한 뒤, 하단의 [변경사항 적용] 버튼을 눌러주세요.")
                     disabled_cols = ['승', '패', '득점', '실점', '득실차']
                     edited_df = st.data_editor(view_df, use_container_width=True, disabled=disabled_cols,
                                                key="main_matrix_editor", row_height=35)
@@ -1995,6 +2367,7 @@ else:
                         st.rerun()
 
                     if has_valid_change:
+                        v_space(10)  # 💡 [간격 조절] 표와 저장 버튼 사이
                         if st.button("💾 변경사항 적용하기", type="primary"):
                             for r in current_labels:
                                 for c in current_labels:
@@ -2028,61 +2401,42 @@ else:
                     st.markdown(completed_css_tab_score + '<div class="custom-table-wrapper">' + raw_html + '</div>',
                                 unsafe_allow_html=True)
 
-            # 상단 제어 바 (공통)
-            col_ctrl1, col_ctrl2, col_ctrl3, col_ctrl4 = st.columns([4, 2, 2, 2])
-            with col_ctrl1:
-                btn_txt = "🔙 이전 화면으로" if st.session_state.fullscreen_table else "📺 전체 화면 모드"
-                if st.button(btn_txt, type="primary", width='stretch'):
-                    st.session_state.fullscreen_table = not st.session_state.fullscreen_table
-                    st.rerun()
-
-            with col_ctrl2:
-                f_col1, f_col2, f_col3 = st.columns([1, 1.5, 1])
-                with f_col1:
-                    if st.button("➖"):
-                        st.session_state.table_font_size = max(8, st.session_state.table_font_size - 1)
-                        st.rerun()
-                with f_col2:
-                    st.markdown(
-                        f"<div style='text-align:center; padding-top:5px;'><b>{st.session_state.table_font_size}</b></div>",
-                        unsafe_allow_html=True)
-                with f_col3:
-                    if st.button("➕"):
-                        st.session_state.table_font_size = min(30, st.session_state.table_font_size + 1)
-                        st.rerun()
-
-            with col_ctrl3:
-                if 'cum_df' in st.session_state and not st.session_state.cum_df.empty:
-                    csv_bytes = st.session_state.cum_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
-                    st.download_button(label="📥 누적 다운로드", data=csv_bytes, file_name=f"{room_name}_누적.csv", mime="text/csv",
-                                       width='stretch')
-
-            with col_ctrl4:
-                if 'h2h_df' in st.session_state and not st.session_state.h2h_df.empty:
-                    h2h_bytes = st.session_state.h2h_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
-                    st.download_button(label="📥 상대전적 다운로드", data=h2h_bytes, file_name=f"{room_name}_상전.csv",
-                                       mime="text/csv", width='stretch')
-
-            # 화면 출력 분기
+            # ---------------------------------------------------------
+            # 🚀 화면 출력 분기 (전체화면 vs 일반화면)
+            # ---------------------------------------------------------
             if st.session_state.fullscreen_table:
-                responsive_text(f"🏆 종합 결과 전광판", pc_size="24px", mobile_size="18px")
+                # 🌟 [전체 화면 모드] 제목과 '이전 화면으로' 버튼을 같은 줄에 배치
+                col_title, col_btn = st.columns([8, 2])
+                with col_title:
+                    responsive_text(f"🏆 종합 결과 전광판", pc_size="16px", mobile_size="14px")
+                with col_btn:
+                    if st.button("🔙 이전 화면으로", type="primary", use_container_width=True):
+                        st.session_state.fullscreen_table = False
+                        st.rerun()
+
+                v_space(15)  # 💡 [간격 조절] 제목과 표 사이
                 draw_summary_table(editable=False)
+
             else:
                 @st.fragment
                 def render_manual_score_input():
-                    responsive_text(f"📋 {'조별' if not is_ind else '개인전'} 점수 입력", pc_size="20px", mobile_size="16px")
-
+                    responsive_text(f"📋 {'조별' if not is_ind else '개인전'} 점수 입력", pc_size="16px", mobile_size="16px")
+                    v_space(5)
                     # [관리자 전용] 수동 점수 입력
                     if not is_admin:
                         st.info("🔒 점수 입력 및 수정은 관리자만 가능합니다.")
                         return
 
-                    st.info(" 기준이 되는 조(선수)를 선택하고 승/패 및 스코어를 입력하세요. (이미 완료된 경기는 비활성화됩니다.)")
+                    st.info(" 기준이 되는 조(선수)를 선택하고 승/패 및 스코어를 입력하세요. (완료된 경기는 비활성화됩니다.)")
                     labels = st.session_state.labels
                     if labels:
-                        c1, c2, c3, c4, c5 = st.columns([2, 2, 1.5, 2.5, 1.5])
+                        # 🎨 [UI/디자인 수정] 수동 점수 입력창의 좌우 비율 조정
+                        # 💡 [좌우 간격 조절] gap="small" 추가
+                        c1, c2, c3, c4, c5 = st.columns([2, 2, 1.5, 2.5, 1.5], gap="medium", vertical_alignment="center")
+
                         with c1:
                             team_a = st.selectbox("A 선수", labels, key="sb_a")
+
                         with c2:
                             def f_b(n):
                                 try:
@@ -2108,11 +2462,13 @@ else:
 
                         with c3:
                             res = st.radio("A 결과", ["승", "패"], horizontal=True, disabled=is_done)
+
                         with c4:
                             win_s = [f"{s}:{limit - s}" for s in range(limit, -1, -1) if s >= limit - s]
                             lose_s = [f"{s.split(':')[1]}:{s.split(':')[0]}" for s in win_s]
                             scores = win_s if res == "승" else lose_s
                             sel_s = st.radio("스코어", scores, horizontal=True, disabled=is_done)
+
                         with c5:
                             if st.button("저장", type="primary", width='stretch', disabled=is_done):
                                 sa, sb = map(int, sel_s.split(':'))
@@ -2124,16 +2480,49 @@ else:
 
                 render_manual_score_input()
 
-                st.divider()
-                responsive_text(f"📊 {'조별 리그' if not is_ind else '개인전'} 순위표", pc_size="22px", mobile_size="18px")
+                v_space(10)
+                st.markdown("<hr style='margin: 0px; border: 1px solid #ddd;'>", unsafe_allow_html=True)
+                v_space(10)
+
+                # 🌟 [핵심 수정] 제목과 제어 버튼(전체화면, 다운로드)들을 한 줄에 나란히 배치
+                col_title, col_fs, col_dl1, col_dl2 = st.columns([1.5, 2, 2, 2], gap="medium", vertical_alignment="center")
+
+                with col_title:
+                    # 🎨 [글자 크기 조절] 순위표 제목
+                    responsive_text(f"📊 {'조별 리그' if not is_ind else '개인전'} 순위표", pc_size="16px", mobile_size="14px")
+
+                with col_fs:
+                    if st.button("📺 전체 화면 모드", type="secondary", use_container_width=True):
+                        st.session_state.fullscreen_table = True
+                        st.rerun()
+
+                with col_dl1:
+                    if 'cum_df' in st.session_state and not st.session_state.cum_df.empty:
+                        csv_bytes = st.session_state.cum_df.to_csv(index=False, encoding='utf-8-sig').encode(
+                            'utf-8-sig')
+                        st.download_button(label="📥 누적 다운로드", data=csv_bytes, file_name=f"{room_name}_누적.csv",
+                                           mime="text/csv", use_container_width=True)
+
+                with col_dl2:
+                    if 'h2h_df' in st.session_state and not st.session_state.h2h_df.empty:
+                        h2h_bytes = st.session_state.h2h_df.to_csv(index=False, encoding='utf-8-sig').encode(
+                            'utf-8-sig')
+                        st.download_button(label="📥 상대전적 다운로드", data=h2h_bytes, file_name=f"{room_name}_상전.csv",
+                                           mime="text/csv", use_container_width=True)
+
+                v_space(10)  # 💡 [간격 조절] 제목/버튼 줄과 아래 표 사이의 간격
 
                 # 관리자면 편집 가능, 일반 사용자면 보기 전용으로 렌더링
                 draw_summary_table(editable=is_admin)
 
                 # 개인 성적 관리 (단체전일 경우)
                 if not is_ind:
-                    st.divider()
-                    responsive_text("👤 개인 성적 관리", pc_size="20px", mobile_size="16px")
+                    v_space(1)
+                    st.markdown("<hr style='margin: 0px; border: 1px solid #ddd;'>", unsafe_allow_html=True)
+                    v_space(1)
+
+                    responsive_text("👤 개인 성적 관리", pc_size="16px", mobile_size="16px")
+                    v_space(1)
 
                     @st.fragment
                     def render_ind_matrix_editor():
@@ -2156,6 +2545,7 @@ else:
                             edited_ind_matrix = st.data_editor(view_ind_df, use_container_width=True, height=320,
                                                                key="ind_matrix_editor")
                             if not edited_ind_matrix.equals(view_ind_df):
+                                v_space(5)
                                 if st.button("💾 개인 성적표 변경사항 적용", type="primary"):
                                     new_ind_matrix = st.session_state.ind_matrix.copy()
                                     for r in edited_ind_matrix.index:
@@ -2178,6 +2568,7 @@ else:
                             st.dataframe(view_ind_df.style.format(precision=0, na_rep='-'), width="stretch")
 
                         # 개인별 순위 요약 (공통)
+                        v_space(15)
                         im = st.session_state.ind_matrix.copy()
                         im_values = pd.to_numeric(im.stack(), errors='coerce').unstack().fillna(0).values
                         ind_rank = pd.DataFrame(index=im.index)
@@ -2188,7 +2579,7 @@ else:
                         sum_loss = im.sum(axis=0, skipna=True).fillna(0).astype(int)
                         ind_rank['세트득실'] = (sum_gain - sum_loss).astype(int)
 
-                        st.markdown("#### 🥇 개인별 순위 요약 (실시간 계산)")
+                        st.markdown("###### 🥇 개인별 순위 요약 (실시간 계산)")
                         st.table(ind_rank.sort_values(['개인승', '세트득실'], ascending=False).head(10))
 
                     render_ind_matrix_editor()
