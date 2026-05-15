@@ -4,20 +4,29 @@ main_markdown_text = """
     /* =========================================
        1. 전체 화면 및 레이아웃 여백 조정
        ========================================= */
-    
+
     /* 메인 화면(우측)의 상하 여백 줄이기 */
     /* 기본값(4\~6rem)이 너무 넓어 화면 상단이 비어 보이는 것을 방지합니다. */
     .block-container {
-        padding-top: 2rem !important; 
-        padding-bottom: 2rem !important;
+        /* 🌟 수정됨: 기존 2rem에서 0rem으로 변경하여 상단 여백을 완전히 없앰 */
+        /* (만약 너무 딱 붙어서 답답하다면 0.5rem 이나 1rem 으로 조절하세요) */
+        padding-top: 0rem !important; 
+        padding-bottom: 0.5rem !important;
     }
-    
+
+    /* 🌟 추가됨: st.title(h1)이나 일반 텍스트에 숨어있는 위쪽 간격 강제 제거 */
+    /* 이 코드가 있어야 첫 번째 글자가 천장에 완벽하게 붙습니다. */
+    h1, div[data-testid="stText"] {
+        margin-top: 0rem !important;
+        padding-top: 0rem !important;
+    }
+
     /* 사이드바(좌측)의 상단 여백 줄이기 */
     /* 메인 화면과 사이드바의 시작 높이를 비슷하게 맞추기 위해 사용합니다. */
     [data-testid="stSidebar"] .block-container {
         padding-top: 2rem !important;
     }
-    
+
     /* 다단(Column) 레이아웃 내부 요소들의 수직 중앙 정렬 */
     /* st.columns()를 썼을 때, 양쪽 컬럼의 내용물 높이가 달라도 세로 중앙에 예쁘게 맞춰집니다. */
     [data-testid="column"] { 
@@ -25,18 +34,24 @@ main_markdown_text = """
         flex-direction: column;    /* 내부 요소들을 위에서 아래로(세로로) 배치 */
         justify-content: center;   /* 세로 기준 '중앙'에 오도록 정렬 */
     }
-    
-    
+
     /* =========================================
        2. 버튼(Button) 디자인 및 간격 설정
        ========================================= */
-    
+
     /* 모든 버튼의 상하 여백 미세 조정 */
     /* 버튼들이 위아래 요소와 너무 딱 붙거나 멀어지지 않게 간격을 통일합니다. */
     .stButton > button {
         margin-top: 5px !important;
         margin-bottom: 5px !important;
     }
+
+    /* 🌟 수정됨: 일반 버튼(.stButton)과 다운로드 버튼(.stDownloadButton) 모두 동일한 여백 적용 */
+    .stButton > button, .stDownloadButton > button {
+        margin-top: 5px !important;
+        margin-bottom: 5px !important;
+    }
+    
     
     /* Primary(주요) 버튼 스타일 변경 */
     /* st.button("확인", type="primary") 처럼 사용된 강조 버튼의 색상을 바꿉니다. */
@@ -44,25 +59,24 @@ main_markdown_text = """
         background-color: #28a745 !important; /* 배경색을 초록색으로 강제 적용 */
         color: white !important;              /* 글자색을 흰색으로 강제 적용 */
     }
-    
+
     /* Secondary(보조/일반) 버튼 스타일 변경 */
     /* type을 지정하지 않은 일반 버튼들의 색상을 바꿉니다. */
     div.stButton > button[kind="secondary"] { 
         background-color: #dc3545 !important; /* 배경색을 빨간색으로 강제 적용 */
         color: white !important;              /* 글자색을 흰색으로 강제 적용 */
     }
-    
-    
+
     /* =========================================
        3. 기본 위젯(탭, 라디오, 알림창 등) 스타일
        ========================================= */
-    
+
     /* 탭(Tabs) 내부의 상단 여백 줄이기 */
     /* 탭 메뉴를 클릭했을 때, 아래 뜨는 내용물이 탭 제목과 너무 멀어지지 않게 당겨줍니다. */
     .stTabs [data-baseweb="tab-panel"] {
         padding-top: 10px !important; 
     }
-    
+
     /* 라디오 버튼(Radio) 가로 정렬 및 간격 축소 */
     /* 기본적으로 세로로 나열되는 라디오 버튼을 가로로 예쁘게 나열합니다. */
     div.row-widget.stRadio > div { 
@@ -70,14 +84,22 @@ main_markdown_text = """
         gap: 10px;           /* 동그라미 항목들 사이의 간격을 10px로 좁게 설정 */
         align-items: center; /* 동그라미와 글자가 삐뚤어지지 않게 수직 중앙 정렬 */
     }
-    
-    /* 알림창(st.info, st.warning, st.success 등) 상하 여백 조절 */
+
+    /* 🌟 수정됨: 알림창(st.info, st.warning, st.success 등) 상하 여백 및 높이 조절 */
     /* 알림창이 차지하는 불필요한 위아래 공간을 줄여줍니다. */
     .stAlert {
         margin-top: 10px !important;
         margin-bottom: 10px !important;
+        padding-top: 0.5rem !important;    /* 박스 안쪽 위 여백 축소 */
+        padding-bottom: 0.5rem !important; /* 박스 안쪽 아래 여백 축소 */
     }
-    
+
+    /* 🌟 추가됨: 알림창 내부 글자(p 태그)의 줄 간격과 숨은 여백 없애기 */
+    .stAlert p {
+        line-height: 1.2 !important;    /* 줄 간격 좁게 */
+        margin-bottom: 0.5rem !important; /* 글자 아래 숨은 여백 제거 */
+    }
+
     /* Expander(접기/펴기 메뉴) 헤더 간격 조절 */
     /* st.expander()의 제목 부분 위아래 여백을 줄여서 공간을 절약합니다. */
     .streamlit-expanderHeader {
@@ -85,21 +107,21 @@ main_markdown_text = """
         padding-bottom: 5px !important;
     }
     
-    
     /* =========================================
        4. 커스텀 클래스 (사용자 정의 요소)
        ========================================= */
-    
     /* 특정 배너(알림창, 설정창 등)를 꾸미는 디자인 */
     /* st.markdown("<div class='setting-banner'>내용</div>", unsafe_allow_html=True) 형태로 사용합니다. */
     .setting-banner { 
         background-color: #f8f9fa; /* 배경색을 아주 연한 회색으로 설정 */
         border: 2px solid #28a745; /* 테두리를 2px 두께의 초록색 실선으로 설정 */
         border-radius: 12px;       /* 모서리를 둥글게 처리 (숫자가 클수록 더 둥글어짐) */
-        padding: 20px;             /* 테두리 안쪽 여백을 20px 주어 글자가 테두리에 붙지 않게 함 */
-        margin-bottom: 20px;       /* 배너 아래쪽 바깥 여백을 20px 주어 다음 요소와 간격을 띄움 */
+        /* 🌟 수정됨: 박스 높이 줄이기 */
+        padding: 10px 20px !important; /* 위아래 10px, 좌우 20px (기존 padding: 20px에서 위아래 축소) */
+        line-height: 1.2 !important;   /* 줄 간격 축소 */
+        margin-bottom: 10px;       /* 배너 아래쪽 바깥 여백을 10px 주어 다음 요소와 간격을 띄움 */
     }
-    
+
     /* 커스텀 테이블을 감싸는 영역의 너비 설정 */
     /* HTML로 직접 만든 테이블이 화면 가로 길이에 꽉 차도록 만들어 줍니다. */
     .custom-table-wrapper { 
