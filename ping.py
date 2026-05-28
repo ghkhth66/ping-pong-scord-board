@@ -6,25 +6,10 @@ import io
 import time
 import hashlib
 import re
-import logging
 from datetime import datetime
-from io import StringIO
+from datetime import datetime as dt  # 안전한 시간 포맷을 위해 별칭(dt)으로도 확보
 import random
-
-# ──────────────────────────────────────────────────────────────
-# 🔧 로깅 설정 (지침 10: 에러 발생 시 debug 기록 유지)
-# app.log 파일에 INFO 이상 레벨 기록, 콘솔에도 동시 출력
-# ──────────────────────────────────────────────────────────────
-LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.log")
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(funcName)s:%(lineno)d - %(message)s",
-    handlers=[
-        logging.FileHandler(LOG_FILE, encoding="utf-8"),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+from io import StringIO
 # 1-2. 데이터 처리 및 서드파티 라이브러리
 import numpy as np
 import pandas as pd
@@ -150,10 +135,10 @@ def get_current_room_sheet_url(target_room):
         return None
 
 def get_available_url(db_df):
-    """미리 생성해둔 구글 시트 URL(PRE_MADE_URLS) 중 아직 사용되지 않은 빈 URL을 찾는 함수.
-    ✅ 버그 수정: 인자로 받은 db_df를 직접 사용 (내부에서 load_room_list 재호출 제거)"""
+    """미리 생성해둔 구글 시트 URL(PRE_MADE_URLS) 중 아직 사용되지 않은 빈 URL을 찾는 함수"""
+    db_df, _ = load_room_list()
     used_urls = db_df['시트URL'].dropna().tolist() if not db_df.empty else []
-    logger.debug(f"PRE_MADE_URLS 개수={len(PRE_MADE_URLS)}, 사용 중={len(used_urls)}")
+    print(PRE_MADE_URLS,"\n",used_urls)
     for url in PRE_MADE_URLS:
         if url not in used_urls:
             return url
@@ -212,30 +197,27 @@ def load_data(uploaded_file=None):
     # 파일이 없으면 공통 함수를 호출하여 더미 데이터 반환
     return pd.DataFrame(generate_dummy_data())
 
-# ──────────────────────────────────────────────────────────────
-# 파일 기반 저장 경로 (절대경로 고정 → Cloud/Docker 배포 시 오류 방지)
-# ──────────────────────────────────────────────────────────────
-_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-HISTORY_FILE = os.path.join(_BASE_DIR, "league_history.json")
-ROOM_STATES_FILE = os.path.join(_BASE_DIR, "room_states.json")  # 진행 중 방 상태 백업
+# 파일 기반 저장 구조 함수 정의
+HISTORY_FILE = "../league_history.json"
+ROOM_STATES_FILE = "../room_states.json"  # 🌟 [추가] 진행 중인 방 상태를 저장할 파일
 
 def save_room_state(room_name):
-    """🌟 현재 방의 진행 상황(세션)을 로컬 JSON에 저장합니다. (백업용)
-    구글 시트 1차 저장 실패 시 복구 기반으로 사용됩니다."""
+    """현재 방의 진행 상황(세션)을 JSON 파일에 저장합니다.
+    🌟 [실시간 공유 핵심] updated_at 타임스탬프를 함께 저장하여
+       스마트폰 등 다른 세션이 변경을 감지하고 자동 갱신할 수 있게 합니다."""
     if os.path.exists(ROOM_STATES_FILE):
         with open(ROOM_STATES_FILE, "r", encoding="utf-8") as f:
             try: data = json.load(f)
-            except Exception as e:
-                logger.warning(f"room_states.json 로드 실패, 새로 생성: {e}")
-                data = {}
+            except: data = {}
     else:
         data = {}
 
-    # 현재 세션의 핵심 데이터만 추출
+    # 현재 세션의 핵심 데이터 추출
     room_data = {
+        # 🌟 [핵심 추가] 저장 시각을 ISO 포맷 문자열로 기록 - 다른 세션이 이 값을 비교해서 변경 감지
+        "updated_at": datetime.now().isoformat(),
         "config_confirmed": st.session_state.get("config_confirmed", False),
         "attendance_confirmed": st.session_state.get("attendance_confirmed", False),
-        # 🌟 [추가] 현재 몇 차전인지도 저장합니다.
         "game_round": st.session_state.get("game_round", 1),
         "config": st.session_state.get("config", {}),
         "labels": st.session_state.get("labels", []),
@@ -251,19 +233,21 @@ def save_room_state(room_name):
     with open(ROOM_STATES_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
+    print(f"[DEBUG] save_room_state: {room_name} saved at {room_data['updated_at']}")
+
 def load_room_state(room_name):
-    """🌟 [추가] 방 이름으로 저장된 진행 상황을 불러와 세션에 복구합니다."""
-    if not os.path.exists(ROOM_STATES_FILE): return False
+    """방 이름으로 저장된 진행 상황을 불러와 세션에 복구합니다.
+    🌟 [실시간 공유] 반환값: (성공여부 bool, updated_at 문자열)"""
+    if not os.path.exists(ROOM_STATES_FILE): return False, None
 
     with open(ROOM_STATES_FILE, "r", encoding="utf-8") as f:
         try: data = json.load(f)
-        except: return False
+        except: return False, None
 
     if room_name in data:
         room_data = data[room_name]
         st.session_state.config_confirmed = room_data.get("config_confirmed", False)
         st.session_state.attendance_confirmed = room_data.get("attendance_confirmed", False)
-        # 🌟 [추가] 저장된 회차를 불러옵니다. 없으면 1차전으로 세팅.
         st.session_state.game_round = room_data.get("game_round", 1)
 
         if room_data.get("config"):
@@ -271,13 +255,11 @@ def load_room_state(room_name):
 
         if room_data.get("labels"): st.session_state.labels = room_data["labels"]
         if room_data.get("teams"):
-            # JSON은 딕셔너리 키를 문자열로 바꾸므로, 다시 정수(int)로 변환
             st.session_state.teams = {int(k): v for k, v in room_data["teams"].items()}
         if room_data.get("draw_results"): st.session_state.draw_results = room_data["draw_results"]
         st.session_state.draw_completed = room_data.get("draw_completed", False)
         st.session_state.draw_level = room_data.get("draw_level", 0)
 
-        # 🌟 [수정된 부분] DataFrame을 불러올 때 인덱스와 컬럼을 명확히 문자열(str)로 고정합니다.
         if room_data.get("matrix"):
             df_m = pd.read_json(StringIO(room_data["matrix"]), orient="split")
             df_m.index = df_m.index.astype(str)
@@ -289,9 +271,26 @@ def load_room_state(room_name):
             df_ind.index = df_ind.index.astype(str)
             df_ind.columns = df_ind.columns.astype(str)
             st.session_state.ind_matrix = df_ind
-        return True
 
-    return False
+        updated_at = room_data.get("updated_at", None)
+        print(f"[DEBUG] load_room_state: {room_name} loaded, updated_at={updated_at}")
+        return True, updated_at
+
+    return False, None
+
+
+def get_room_updated_at(room_name):
+    """파일에서 해당 방의 updated_at 타임스탬프만 가볍게 읽어 반환합니다.
+    🌟 [실시간 공유 핵심] 세션 데이터를 건드리지 않고 변경 여부만 빠르게 확인하는 용도."""
+    try:
+        if not os.path.exists(ROOM_STATES_FILE):
+            return None
+        with open(ROOM_STATES_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get(room_name, {}).get("updated_at", None)
+    except Exception as e:
+        print(f"[DEBUG] get_room_updated_at error: {e}")
+        return None
 
 def save_league_history(key_name, labels, matrix_df, ind_matrix_df, config):
     """현재 리그 데이터를 로컬 JSON 파일에 저장합니다."""
@@ -350,170 +349,6 @@ def load_league_history(key_name):
         st.session_state.config = target["config"]
         return True
     return False
-
-
-# ──────────────────────────────────────────────────────────────
-# 🔑 구글 시트 즉시 동기화 헬퍼 (지침 1·2·8: 관리자 입력 즉시 클라우드 반영)
-# 참석 확정, 설정 확정, 경기 결과 저장 시 호출하여 일반 회원도 실시간 조회 가능하게 함
-# ──────────────────────────────────────────────────────────────
-def sync_to_gsheet(label: str = ""):
-    """세션의 main_df / cum_df / h2h_df 를 구글 시트에 즉시 저장합니다.
-    label: 로그용 식별자 (어느 단계에서 호출했는지 추적)"""
-    room = st.session_state.get("room_name", "")
-    if not room:
-        logger.warning(f"sync_to_gsheet({label}): room_name 없음 - 저장 건너뜀")
-        return False
-    try:
-        target_url = get_current_room_sheet_url(room)
-        if not target_url:
-            logger.warning(f"sync_to_gsheet({label}): {room} 의 시트 URL 없음")
-            return False
-
-        # 선수명단 저장
-        if "main_df" in st.session_state and not st.session_state.main_df.empty:
-            conn.update(spreadsheet=target_url, worksheet="선수명단",
-                        data=st.session_state.main_df)
-
-        # 누적전적 저장
-        if "cum_df" in st.session_state and not st.session_state.cum_df.empty:
-            conn.update(spreadsheet=target_url, worksheet="누적전적",
-                        data=st.session_state.cum_df)
-
-        # 상대전적 저장
-        if "h2h_df" in st.session_state and not st.session_state.h2h_df.empty:
-            conn.update(spreadsheet=target_url, worksheet="상대전적",
-                        data=st.session_state.h2h_df)
-
-        logger.info(f"sync_to_gsheet({label}): {room} 구글 시트 저장 완료")
-        return True
-
-    except Exception as e:
-        logger.error(f"sync_to_gsheet({label}): 저장 실패 - {e}", exc_info=True)
-        return False
-
-
-def sync_match_state_to_gsheet(label: str = ""):
-    """경기 진행 상황(matrix, ind_matrix, config)을 구글 시트의 '경기현황' 시트에 저장합니다.
-    일반 회원(스마트폰)이 실시간으로 경기 현황을 조회할 수 있도록 JSON으로 직렬화하여 저장."""
-    room = st.session_state.get("room_name", "")
-    if not room:
-        return False
-    try:
-        target_url = get_current_room_sheet_url(room)
-        if not target_url:
-            return False
-
-        # matrix, ind_matrix, config, labels를 JSON 직렬화
-        state_dict = {
-            "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "game_round": st.session_state.get("game_round", 1),
-            "config": st.session_state.get("config", {}),
-            "labels": st.session_state.get("labels", []),
-            "teams": {str(k): v for k, v in st.session_state.get("teams", {}).items()},
-            "draw_completed": st.session_state.get("draw_completed", False),
-            "config_confirmed": st.session_state.get("config_confirmed", False),
-            "attendance_confirmed": st.session_state.get("attendance_confirmed", False),
-            "matrix": st.session_state.matrix.to_json(orient="split")
-                        if "matrix" in st.session_state and st.session_state.matrix is not None else None,
-            "ind_matrix": st.session_state.ind_matrix.to_json(orient="split")
-                        if "ind_matrix" in st.session_state and st.session_state.ind_matrix is not None else None,
-            # 🌟 경기 종료 시각 기록 (종료 예상 시간 계산용)
-            "last_result_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        }
-
-        # 구글 시트 '경기현황' 시트에 key/value 형태로 저장 (1행 = 키, 2행 = 값)
-        state_df = pd.DataFrame([{"key": "match_state", "value": json.dumps(state_dict, ensure_ascii=False)}])
-        conn.update(spreadsheet=target_url, worksheet="경기현황", data=state_df)
-
-        logger.info(f"sync_match_state_to_gsheet({label}): 경기 현황 저장 완료")
-        return True
-
-    except Exception as e:
-        logger.error(f"sync_match_state_to_gsheet({label}): 실패 - {e}", exc_info=True)
-        return False
-
-
-def load_match_state_from_gsheet(room_name: str):
-    """구글 시트 '경기현황' 시트에서 경기 상태를 불러와 세션에 복원합니다.
-    일반 회원(조회 전용) 접속 시 자동 호출하여 최신 상태를 반영합니다."""
-    try:
-        target_url = get_current_room_sheet_url(room_name)
-        if not target_url:
-            return False
-
-        df = conn.read(spreadsheet=target_url, worksheet="경기현황", ttl=0)
-        if df.empty or "value" not in df.columns:
-            return False
-
-        state_dict = json.loads(df.iloc[0]["value"])
-
-        # 세션에 상태 복원
-        st.session_state.game_round = state_dict.get("game_round", 1)
-        st.session_state.config_confirmed = state_dict.get("config_confirmed", False)
-        st.session_state.attendance_confirmed = state_dict.get("attendance_confirmed", False)
-        st.session_state.draw_completed = state_dict.get("draw_completed", False)
-
-        if state_dict.get("config"):
-            st.session_state.config = state_dict["config"]
-        if state_dict.get("labels"):
-            st.session_state.labels = state_dict["labels"]
-        if state_dict.get("teams"):
-            st.session_state.teams = {int(k): v for k, v in state_dict["teams"].items()}
-
-        if state_dict.get("matrix"):
-            df_m = pd.read_json(StringIO(state_dict["matrix"]), orient="split")
-            df_m.index = df_m.index.astype(str)
-            df_m.columns = df_m.columns.astype(str)
-            st.session_state.matrix = df_m
-
-        if state_dict.get("ind_matrix"):
-            df_ind = pd.read_json(StringIO(state_dict["ind_matrix"]), orient="split")
-            df_ind.index = df_ind.index.astype(str)
-            df_ind.columns = df_ind.columns.astype(str)
-            st.session_state.ind_matrix = df_ind
-
-        logger.info(f"load_match_state_from_gsheet: {room_name} 경기 현황 복원 완료")
-        return True
-
-    except Exception as e:
-        logger.error(f"load_match_state_from_gsheet: {room_name} 복원 실패 - {e}", exc_info=True)
-        return False
-
-
-def calc_estimated_end_time():
-    """지침 7: 경기 결과 입력 시간 기준으로 잔여 경기의 종료 예상 시간을 계산합니다.
-    반환값: (남은 경기수, 예상 종료 시각 문자열) 또는 (None, None)"""
-    try:
-        if "matrix" not in st.session_state or st.session_state.matrix is None:
-            return None, None
-        if "result_timestamps" not in st.session_state:
-            return None, None
-
-        timestamps = st.session_state.result_timestamps  # list[datetime]
-        if len(timestamps) < 2:
-            return None, None
-
-        # 최근 입력된 경기들의 평균 소요 시간 계산 (최대 최근 5경기)
-        recent = timestamps[-5:]
-        intervals = [(recent[i+1] - recent[i]).total_seconds() for i in range(len(recent)-1)]
-        avg_sec = sum(intervals) / len(intervals)
-
-        # 전체 경기 수 및 완료 경기 수 계산
-        m = st.session_state.matrix
-        total_matches = (len(m) * (len(m) - 1)) // 2
-        finished = int(pd.notna(m.values).sum() / 2)  # 대칭행렬이므로 2로 나눔
-        remaining = max(0, total_matches - finished)
-
-        if remaining == 0:
-            return 0, "모든 경기 완료"
-
-        est_sec = remaining * avg_sec
-        est_end = datetime.now() + __import__("datetime").timedelta(seconds=est_sec)
-        return remaining, est_end.strftime("%H:%M")
-
-    except Exception as e:
-        logger.warning(f"calc_estimated_end_time 계산 오류: {e}")
-        return None, None
 
 # 4. 핵심 비즈니스 로직 (Core Business Logic)
 # 경기 결과를 바탕으로 전적을 계산하고 업데이트하는 핵심 로직입니다.
@@ -688,11 +523,29 @@ db_df, room_list = load_room_list()
 is_admin = st.session_state.is_admin
 room_name = st.session_state.room_name
 
-# 🌟 [수정 1] 새로고침(F5) 대비 Auto-Load 추가
-# 관리자로 로그인된 상태인데 세션 데이터(config 등)가 날아갔다면 즉시 복구합니다.
+# 🌟 [수정 1] 새로고침(F5) 대비 Auto-Load: 관리자 세션 데이터 복구
 if is_admin and room_name:
     if "config" not in st.session_state or st.session_state.get("matrix") is None:
-        load_room_state(room_name)
+        load_room_state(room_name)  # 반환값 무시 (복구 목적만)
+
+# ──────────────────────────────────────────────────────────────────
+# 🌟 [핵심 추가] 비관리자(스마트폰 회원) 실시간 동기화
+# 매 rerun마다 room_states.json의 updated_at 타임스탬프를 확인하여
+# 관리자가 저장한 내용이 있으면 자동으로 로드 + 화면 갱신합니다.
+# ──────────────────────────────────────────────────────────────────
+if not is_admin and room_name:
+    # 세션에 기억한 마지막 동기화 시각 (없으면 None)
+    _last_sync = st.session_state.get("_last_sync_at", None)
+    # 파일에서 최신 updated_at만 가볍게 읽기 (전체 로드 없이)
+    _file_updated = get_room_updated_at(room_name)
+
+    if _file_updated and _file_updated != _last_sync:
+        # 변경 감지 → 전체 상태 로드 후 세션에 동기화 시각 기록
+        ok, _new_ts = load_room_state(room_name)
+        if ok:
+            st.session_state._last_sync_at = _new_ts
+            print(f"[DEBUG] 비관리자 자동 동기화 완료: {_new_ts}")
+            st.rerun()  # 갱신된 데이터로 화면 즉시 재렌더링
 
 if not is_admin:
     st.sidebar.markdown("### 🏟️ 구장 접속 및 생성")
@@ -740,20 +593,19 @@ if not is_admin:
 
                 target_url = get_current_room_sheet_url(login_room_name)
 
-                # ★ 로그인 성공 시 구글 시트에서 최신 경기 현황 우선 복원
-                # 일반 회원도 관리자가 입력한 최신 상태를 즉시 확인 가능
-                gsheet_loaded = load_match_state_from_gsheet(login_room_name)
-                if gsheet_loaded:
-                    st.sidebar.success("📡 구글 시트에서 최신 경기 현황을 불러왔습니다!")
-                    logger.info(f"로그인: {login_room_name} 구글 시트 현황 복원 성공")
-                elif load_room_state(login_room_name):
-                    st.sidebar.success("📂 로컬 백업에서 이전 진행 상황을 불러왔습니다!")
+                # 🌟 로그인 성공 시 이전 진행 상황 불러오기
+                ok, _ts = load_room_state(login_room_name)
+                if ok:
+                    # 동기화 기준 시각 초기화 (이 이후부터 변경분만 감지)
+                    st.session_state._last_sync_at = _ts
+                    st.sidebar.success("📂 이전 진행 상황을 성공적으로 불러왔습니다!")
                 else:
+                    st.session_state._last_sync_at = None
                     st.sidebar.info("새로운 세션입니다. 설정을 시작해주세요.")
 
                 if target_url:
                     try:
-                        # 해당 구장 전용 시트에서 명단/전적 데이터 로드
+                        # 해당 구장 전용 시트에서 데이터 로드
                         st.session_state.main_df = conn.read(spreadsheet=target_url, worksheet="선수명단", ttl=0)
                         st.session_state.cum_df = conn.read(spreadsheet=target_url, worksheet="누적전적", ttl=0)
                         st.session_state.h2h_df = conn.read(spreadsheet=target_url, worksheet="상대전적", ttl=0)
@@ -772,20 +624,17 @@ if not is_admin:
                             sh = gc.open_by_url(target_url)
 
                             # 🔥 [추가할 코드] 구글 드라이브에 있는 파일의 제목을 '방이름_DB'로 자동 변경합니다!
-                            sh.update_title(f"{login_room_name}_DB")  # ✅ NameError 수정: new_room_name → login_room_name
+                            sh.update_title(f"{new_room_name}_DB")
 
                             existing_sheets = [ws.title for ws in sh.worksheets()]
 
-                            # 시트가 없으면 물리적으로 탭 추가 (경기현황 포함)
+                            # 시트가 없으면 물리적으로 탭 추가
                             if "선수명단" not in existing_sheets:
                                 sh.add_worksheet(title="선수명단", rows="1000", cols="20")
                             if "누적전적" not in existing_sheets:
                                 sh.add_worksheet(title="누적전적", rows="1000", cols="20")
                             if "상대전적" not in existing_sheets:
                                 sh.add_worksheet(title="상대전적", rows="1000", cols="20")
-                            # ★ 경기 현황 시트: 일반 회원 실시간 조회용 (JSON 저장)
-                            if "경기현황" not in existing_sheets:
-                                sh.add_worksheet(title="경기현황", rows="10", cols="2")
 
                             # 생성된 시트에 기본 컬럼 업데이트
                             conn.update(spreadsheet=target_url, worksheet="선수명단", data=empty_main)
@@ -793,7 +642,6 @@ if not is_admin:
                             conn.update(spreadsheet=target_url, worksheet="상대전적", data=empty_h2h)
 
                         except Exception as inner_e:
-                            logger.error(f"시트 자동 생성 중 오류: {inner_e}", exc_info=True)
                             st.sidebar.error(f"시트 자동 생성 중 오류 발생: {inner_e}")
 
                         st.session_state.main_df = empty_main
@@ -852,7 +700,7 @@ if not is_admin:
                     cookies["last_room"] = new_room_name
                     cookies.save()
 
-                    with st.spinner("데이터베이스를 초기화 중입니다... (약 5~10초 소요)"):
+                    with st.spinner("데이터베이스를 초기화 중입니다... (약 5\~10초 소요)"):
                         empty_main = get_sheet_template("선수명단")
                         empty_cum = get_sheet_template("누적전적")
                         empty_h2h = get_sheet_template("상대전적")
@@ -864,27 +712,23 @@ if not is_admin:
 
                             existing_sheets = [ws.title for ws in sh.worksheets()]
 
-                            # 시트가 없으면 물리적으로 탭 추가 (경기현황 시트 포함)
+                            # 시트가 없으면 물리적으로 탭 추가
                             if "선수명단" not in existing_sheets:
                                 sh.add_worksheet(title="선수명단", rows="1000", cols="20")
                             if "누적전적" not in existing_sheets:
                                 sh.add_worksheet(title="누적전적", rows="1000", cols="20")
                             if "상대전적" not in existing_sheets:
                                 sh.add_worksheet(title="상대전적", rows="1000", cols="20")
-                            # ★ 경기현황 시트: 관리자 입력 → 일반 회원 실시간 조회용 JSON 저장
-                            if "경기현황" not in existing_sheets:
-                                sh.add_worksheet(title="경기현황", rows="10", cols="2")
 
-                            # 기본 '시트1'이 남아있다면 깔끔하게 삭제
+                            # 기본 '시트1'이 남아있다면 깔끔하게 삭제 (선택사항)
                             for ws_name in ["시트1", "Sheet1"]:
                                 if ws_name in existing_sheets and len(sh.worksheets()) > 1:
                                     try:
                                         sh.del_worksheet(sh.worksheet(ws_name))
-                                    except Exception as del_e:
-                                        logger.warning(f"기본 시트 삭제 실패: {del_e}")
+                                    except:
+                                        pass
 
                         except Exception as e:
-                            logger.error(f"새 구장 시트 생성 오류: {e}", exc_info=True)
                             st.error(f"시트 생성 중 오류 발생: {e}")
 
                         # 생성된 시트에 기본 컬럼 업데이트
@@ -1162,6 +1006,17 @@ if '조편성_신청' not in st.session_state.main_df.columns:
 tab_home, tab_config, tab_team, tab_match, tab_score, tab_help, tab_raffle  = st.tabs(
     [" 출석체크", " 운영 설정", " 조 편성 결과", " 경기 배정", " 스코어보드", "사용설명서", "경품추첨"])
 
+# ──────────────────────────────────────────────────────────────────
+# 🌟 [실시간 공유] 비관리자(스마트폰 회원) 자동 새로고침
+# - 관리자가 데이터를 저장할 때마다 updated_at이 바뀌므로
+#   비관리자 세션은 30초마다 파일을 확인하여 변경분을 자동 반영합니다.
+# - 관리자는 직접 입력하므로 자동 새로고침 불필요 (입력 방해 방지)
+# ──────────────────────────────────────────────────────────────────
+if not is_admin and room_name:
+    # 30초마다 rerun 트리거 (비관리자 전용)
+    # 이 rerun이 발생하면 위의 실시간 동기화 블록이 실행되어 변경 감지
+    st_autorefresh(interval=30 * 1000, limit=None, key="viewer_autorefresh")
+
 attendees_count = (
         st.session_state.main_df[col_date] == 'Y').sum() if col_date in st.session_state.main_df.columns else 0
 
@@ -1234,18 +1089,10 @@ with tab_home:
         if st.button(btn_label, type=btn_type, width='stretch'):
             # 화면의 체크 상태(True/False)를 원본 데이터 형식('Y'/'N')으로 변환하여 오늘 날짜 컬럼(col_date)에 저장
             st.session_state.main_df[col_date] = edited_df['참석'].apply(lambda x: 'Y' if x else 'N')
+
+            # (선택사항) '참석예정' 컬럼도 동기화하고 싶다면 아래 주석 해제
             st.session_state.attendance_confirmed = True
-
-            # ★ 참석 확정 즉시 구글 시트 저장 → 일반 회원 실시간 반영
-            with st.spinner("참석 명단을 클라우드에 저장 중..."):
-                ok = sync_to_gsheet(label="참석확정")
-                save_room_state(st.session_state.room_name)  # 로컬 백업
-
-            if ok:
-                st.success("✅ 참석자 명단이 저장되었습니다. (구글 시트 동기화 완료)")
-                logger.info(f"참석 확정 완료: {attendees_count}명")
-            else:
-                st.warning("⚠️ 로컬 저장 완료. 구글 시트 동기화 실패 (네트워크 확인)")
+            st.success("✅ 오늘의 참석자 명단이 시스템에 기록되었습니다.")
             time.sleep(1)
             st.rerun()
 
@@ -1341,11 +1188,8 @@ with tab_config:
                 }
 
                 st.session_state.config_confirmed = True
-
-                # ★ 설정 확정 즉시 구글 시트 경기현황 저장 → 일반 회원 실시간 반영
-                save_room_state(st.session_state.room_name)        # 로컬 백업
-                sync_match_state_to_gsheet(label="설정확정")          # 구글 시트 동기화
-                logger.info(f"운영 설정 확정: g={g_val}, s={s_g}, d={d_g}, set={set_c}, method={draw_method}")
+                # 🌟 [수정 2] 설정이 완료되면 즉시 파일에 자동 저장
+                save_room_state(st.session_state.room_name)
                 st.rerun()
         else:
             st.info("관리자 전용")
@@ -1601,14 +1445,6 @@ with tab_match:
     # 조 편성이 완료되어 세션에 'labels'(조 이름 목록)와 'matrix'(점수판)가 존재할 때만 실행
     if 'labels' in st.session_state and st.session_state.get('matrix') is not None:
 
-        # ★ [지침 7] 잔여 경기 수 및 종료 예상 시간 표시
-        remaining_cnt, est_end = calc_estimated_end_time()
-        if remaining_cnt is not None:
-            if remaining_cnt == 0:
-                st.success("🏁 모든 경기가 완료되었습니다!")
-            else:
-                st.info(f"⏱️ 잔여 경기: **{remaining_cnt}경기** | 예상 종료: **{est_end}** (최근 경기 평균 소요 시간 기준)")
-
         def get_matches(teams):
             t_list = list(teams)
             # 팀이 홀수면 짝을 맞추기 위해 가상의 '부전승(None)' 팀을 추가합니다.
@@ -1736,37 +1572,58 @@ with tab_match:
                 if is_ind:
                     # [A] 개인전 로직 (생략 없이 유지)
                     m_idx = selected_match_idx
-                    c1, c2, c3, c4, c5 = st.columns([1.5, 1.5, 2.5, 1.5, 1.5])
-                    with c1:
-                        st.markdown(f"<div style='text-align:center;'>{team_a}</div>", unsafe_allow_html=True)
 
-                    with c2:
-                        res_type = st.radio(f"결과", ["승", "패"], horizontal=True, key=f"m{m_idx}_ind_res")
+                    # ── [수정 3.1] 이미 결과가 저장된 경기는 선수 이름과 결과를 표시 ──
+                    # matrix에서 두 선수의 기존 결과 확인
+                    _ind_done = False
+                    try:
+                        _va = float(st.session_state.matrix.loc[team_a, team_b])
+                        _vb = float(st.session_state.matrix.loc[team_b, team_a])
+                        if pd.notna(_va) and pd.notna(_vb) and (_va + _vb > 0):
+                            _ind_done = True
+                    except Exception:
+                        pass
 
-                    with c3:
-                        # scores = [f"{limit}:{i}" for i in range(limit)] if res_type == "승" else [f"{i}:{limit}" for i in range(limit)]
-                        scores = [f"{set_rule}:{i}" for i in range(set_rule)] if res_type == "승" else [f"{i}:{set_rule}" for i in range(set_rule)]
-                        selected_score = st.radio("스코어", scores, horizontal=True, key=f"m{m_idx}_ind_score")
-
-                    with c4:
-                        st.markdown(f"<div style='text-align:center;'>{team_b}</div>", unsafe_allow_html=True)
-
-                    with c5:
-                        if st.button("결과 저장", type="primary", key=f"btn_save_ind_{m_idx}"):
-                            s_a, s_b = map(int, selected_score.split(':'))
-                            st.session_state.matrix.loc[team_a, team_b] = s_a
-                            st.session_state.matrix.loc[team_b, team_a] = s_b
-
-                            # ★ 경기 결과 입력 시각 기록 (종료 예상 시간 계산용)
-                            if "result_timestamps" not in st.session_state:
-                                st.session_state.result_timestamps = []
-                            st.session_state.result_timestamps.append(datetime.now())
-
-                            # ★ 구글 시트 즉시 동기화 → 일반 회원 실시간 조회 가능
-                            save_room_state(st.session_state.room_name)   # 로컬 백업
-                            sync_match_state_to_gsheet(label="개인전결과")  # 구글 시트 동기화
-                            logger.info(f"개인전 결과 저장: {team_a} {s_a}:{s_b} {team_b}")
+                    if _ind_done:
+                        # 완료된 경기: 선수 이름 + 결과 스코어를 카드 형태로 표시
+                        _sa_disp = int(_va)
+                        _sb_disp = int(_vb)
+                        _win_label = f"🏆 {team_a}" if _sa_disp > _sb_disp else (f"🏆 {team_b}" if _sb_disp > _sa_disp else "무승부")
+                        st.success(
+                            f"✅ **완료된 경기** | "
+                            f"**{team_a}** {_sa_disp} : {_sb_disp} **{team_b}** | 승자: {_win_label}"
+                        )
+                        # 결과 수정이 필요할 경우 재입력 버튼 제공
+                        if st.button("🔄 결과 재입력", key=f"btn_reenter_ind_{m_idx}"):
+                            # matrix 값을 NaN으로 초기화하여 재입력 가능하게 함
+                            st.session_state.matrix.loc[team_a, team_b] = np.nan
+                            st.session_state.matrix.loc[team_b, team_a] = np.nan
+                            save_room_state(st.session_state.room_name)
                             st.rerun()
+                    else:
+                        # 미완료 경기: 기존 입력 UI 표시
+                        c1, c2, c3, c4, c5 = st.columns([1.5, 1.5, 2.5, 1.5, 1.5])
+                        with c1:
+                            st.markdown(f"<div style='text-align:center;'>{team_a}</div>", unsafe_allow_html=True)
+
+                        with c2:
+                            res_type = st.radio(f"결과", ["승", "패"], horizontal=True, key=f"m{m_idx}_ind_res")
+
+                        with c3:
+                            scores = [f"{set_rule}:{i}" for i in range(set_rule)] if res_type == "승" else [f"{i}:{set_rule}" for i in range(set_rule)]
+                            selected_score = st.radio("스코어", scores, horizontal=True, key=f"m{m_idx}_ind_score")
+
+                        with c4:
+                            st.markdown(f"<div style='text-align:center;'>{team_b}</div>", unsafe_allow_html=True)
+
+                        with c5:
+                            if st.button("결과 저장", type="primary", key=f"btn_save_ind_{m_idx}"):
+                                s_a, s_b = map(int, selected_score.split(':'))
+                                st.session_state.matrix.loc[team_a, team_b] = s_a
+                                st.session_state.matrix.loc[team_b, team_a] = s_b
+
+                                save_room_state(st.session_state.room_name)  # 🌟 [수정 5-1] 개인전 점수 자동 저장
+                                st.rerun()
 
                 # [B] 단체전(조별 리그)일 경우의 점수 입력 UI (단식/복식 각각 입력)
                 else:
@@ -1778,148 +1635,201 @@ with tab_match:
                             return [p.split('(')[0] for p in st.session_state.teams.get(t_idx, [])]
                         return list(st.session_state.ind_matrix.index)
 
-
                     team_a_players = get_team_players(team_a)
                     team_b_players = get_team_players(team_b)
                     m_idx = selected_match_idx
 
-                    # 💡 핵심: 단식용 가용 인원 체크 (단식 선수들끼리만 중복 제거)
-                    def get_avail_single(players, current_key):
-                        selected = [st.session_state[f"m{m_idx}_s_p{ab}_{s}"]
-                                    for ab in ['a', 'b'] for s in range(s_games)
-                                    if f"m{m_idx}_s_p{ab}_{s}" in st.session_state
-                                    and f"m{m_idx}_s_p{ab}_{s}" != current_key
-                                    and st.session_state[f"m{m_idx}_s_p{ab}_{s}"] != "선택안함"]
-                        return ["선택안함"] + [p for p in players if p not in selected]
+                    # ── [수정 3.1] 단체전 결과 완료 여부 확인 ──
+                    # matrix에 두 조의 점수 합이 0보다 크면 완료로 판단
+                    _team_done = False
+                    _tv_a, _tv_b = np.nan, np.nan
+                    try:
+                        _tv_a = float(st.session_state.matrix.loc[team_a, team_b])
+                        _tv_b = float(st.session_state.matrix.loc[team_b, team_a])
+                        if pd.notna(_tv_a) and pd.notna(_tv_b) and (_tv_a + _tv_b > 0):
+                            _team_done = True
+                    except Exception:
+                        pass
 
-                    # 💡 핵심: 복식용 가용 인원 체크 (단식 인원은 포함시키고, 복식 내부 인원만 중복 제거)
-                    def get_avail_double(players, current_key):
-                        selected = [st.session_state[f"m{m_idx}_d_p{ab}{num}_{d}"]
-                                    for ab in ['a', 'b'] for num in [1, 2] for d in range(d_games)
-                                    if f"m{m_idx}_d_p{ab}{num}_{d}" in st.session_state
-                                    and f"m{m_idx}_d_p{ab}{num}_{d}" != current_key
-                                    and st.session_state[f"m{m_idx}_d_p{ab}{num}_{d}"] != "선택안함"]
-                        return ["선택안함"] + [p for p in players if p not in selected]
+                    if _team_done:
+                        # ── 완료된 단체전: 조 스코어 + ind_matrix에서 개인 단식 결과 복원하여 표시 ──
+                        _sa_t = int(_tv_a)
+                        _sb_t = int(_tv_b)
+                        _team_winner = f"🏆 {team_a}" if _sa_t > _sb_t else (f"🏆 {team_b}" if _sb_t > _sa_t else "무승부")
+                        st.success(
+                            f"✅ **완료된 경기** | **{team_a}** {_sa_t} : {_sb_t} **{team_b}** | 승자: {_team_winner}"
+                        )
 
+                        # ind_matrix에서 team_a / team_b 소속 선수 간 대결 결과를 조회하여 표시
+                        if 'ind_matrix' in st.session_state:
+                            st.markdown("##### 📋 개인 단식 결과 확인")
+                            _rows = []
+                            for _pa in team_a_players:
+                                for _pb in team_b_players:
+                                    try:
+                                        _vs_a = st.session_state.ind_matrix.loc[_pa, _pb]
+                                        _vs_b = st.session_state.ind_matrix.loc[_pb, _pa]
+                                        if pd.notna(_vs_a) and pd.notna(_vs_b) and (float(_vs_a) + float(_vs_b) > 0):
+                                            _vs_a = int(_vs_a)
+                                            _vs_b = int(_vs_b)
+                                            _winner = _pa if _vs_a > _vs_b else (_pb if _vs_b > _vs_a else "무승부")
+                                            _rows.append({
+                                                "A팀 선수": _pa,
+                                                "스코어": f"{_vs_a} : {_vs_b}",
+                                                "B팀 선수": _pb,
+                                                "승자": f"🏆 {_winner}"
+                                            })
+                                    except Exception:
+                                        pass
+                            if _rows:
+                                st.dataframe(pd.DataFrame(_rows), hide_index=True, use_container_width=True)
+                            else:
+                                st.info("개인 단식 기록이 없습니다. (복식만 진행된 경기이거나 기록 없음)")
 
-                    match_results = []
+                        # 결과 재입력 버튼 (matrix 초기화 → 재입력 가능)
+                        if st.button("🔄 결과 재입력", key=f"btn_reenter_team_{m_idx}"):
+                            st.session_state.matrix.loc[team_a, team_b] = np.nan
+                            st.session_state.matrix.loc[team_b, team_a] = np.nan
+                            # ind_matrix에서 해당 조 선수 간 기록도 초기화
+                            for _pa in team_a_players:
+                                for _pb in team_b_players:
+                                    try:
+                                        st.session_state.ind_matrix.loc[_pa, _pb] = np.nan
+                                        st.session_state.ind_matrix.loc[_pb, _pa] = np.nan
+                                    except Exception:
+                                        pass
+                            save_room_state(st.session_state.room_name)
+                            st.rerun()
 
-                    # 💡 [수정] 상단에서 동적으로 판단된 limit(개인전 선승세트 혹은 단체전 세트수)를 그대로 사용합니다.
-                    # set_limit = limit
-                    set_limit = set_rule
-                    set_win_scores = [f"{set_limit}:{i}" for i in range(set_limit)]
-                    set_lose_scores = [f"{i}:{set_limit}" for i in range(set_limit)]
+                    else:
+                        # ── 미완료 단체전: 기존 선수 선택 및 점수 입력 UI ──
 
-                    # --- 단식 경기 섹션 ---
-                    if s_games > 0:
-                        st.markdown("#### 👤 단식 경기")
-                        for s in range(s_games):
-                            c1, c2, c3, c4, c5 = st.columns([1, 2.5, 1.5, 2.5, 2.5])
-                            ka, kb = f"m{m_idx}_s_pa_{s}", f"m{m_idx}_s_pb_{s}"
+                        # 💡 핵심: 단식용 가용 인원 체크 (단식 선수들끼리만 중복 제거)
+                        def get_avail_single(players, current_key):
+                            selected = [st.session_state[f"m{m_idx}_s_p{ab}_{s}"]
+                                        for ab in ['a', 'b'] for s in range(s_games)
+                                        if f"m{m_idx}_s_p{ab}_{s}" in st.session_state
+                                        and f"m{m_idx}_s_p{ab}_{s}" != current_key
+                                        and st.session_state[f"m{m_idx}_s_p{ab}_{s}"] != "선택안함"]
+                            return ["선택안함"] + [p for p in players if p not in selected]
 
-                            with c1: st.write(f"단식 {s + 1}")
+                        # 💡 핵심: 복식용 가용 인원 체크 (단식 인원은 포함시키고, 복식 내부 인원만 중복 제거)
+                        def get_avail_double(players, current_key):
+                            selected = [st.session_state[f"m{m_idx}_d_p{ab}{num}_{d}"]
+                                        for ab in ['a', 'b'] for num in [1, 2] for d in range(d_games)
+                                        if f"m{m_idx}_d_p{ab}{num}_{d}" in st.session_state
+                                        and f"m{m_idx}_d_p{ab}{num}_{d}" != current_key
+                                        and st.session_state[f"m{m_idx}_d_p{ab}{num}_{d}"] != "선택안함"]
+                            return ["선택안함"] + [p for p in players if p not in selected]
 
-                            with c2: p_a = st.selectbox(f"A팀", get_avail_single(team_a_players, ka), key=ka,
+                        match_results = []
+
+                        # 💡 [수정] 상단에서 동적으로 판단된 limit(개인전 선승세트 혹은 단체전 세트수)를 그대로 사용합니다.
+                        set_limit = set_rule
+                        set_win_scores = [f"{set_limit}:{i}" for i in range(set_limit)]
+                        set_lose_scores = [f"{i}:{set_limit}" for i in range(set_limit)]
+
+                        # --- 단식 경기 섹션 ---
+                        if s_games > 0:
+                            st.markdown("#### 👤 단식 경기")
+                            for s in range(s_games):
+                                c1, c2, c3, c4, c5 = st.columns([1, 2.5, 1.5, 2.5, 2.5])
+                                ka, kb = f"m{m_idx}_s_pa_{s}", f"m{m_idx}_s_pb_{s}"
+
+                                with c1: st.write(f"단식 {s + 1}")
+
+                                with c2: p_a = st.selectbox(f"A팀", get_avail_single(team_a_players, ka), key=ka,
+                                                            label_visibility="collapsed")
+
+                                with c3: res = st.radio("결과", ["승", "패"], horizontal=True, key=f"m{m_idx}_s_res_{s}",
                                                         label_visibility="collapsed")
 
-                            with c3: res = st.radio("결과", ["승", "패"], horizontal=True, key=f"m{m_idx}_s_res_{s}",
-                                                    label_visibility="collapsed")
+                                with c4:
+                                    sc = st.radio("점수", set_win_scores if res == "승" else set_lose_scores, horizontal=True,
+                                                  key=f"m{m_idx}_s_sc_{s}", label_visibility="collapsed")
+                                    s_a, s_b = map(int, sc.split(':'))
 
-                            with c4:
-                                sc = st.radio("점수", set_win_scores if res == "승" else set_lose_scores, horizontal=True,
-                                              key=f"m{m_idx}_s_sc_{s}", label_visibility="collapsed")
-                                s_a, s_b = map(int, sc.split(':'))
+                                with c5: p_b = st.selectbox(f"B팀", get_avail_single(team_b_players, kb), key=kb,
+                                                            label_visibility="collapsed")
+                                match_results.append(("S", p_a, s_a, s_b, p_b))
 
-                            with c5: p_b = st.selectbox(f"B팀", get_avail_single(team_b_players, kb), key=kb,
+                        st.write("")
+
+                        # --- 복식 경기 섹션 ---
+                        if d_games > 0:
+                            responsive_text(f"👥 복식 경기", pc_size="20px", mobile_size="16px")
+                            for d in range(d_games):
+                                c1, c2, c3, c4, c5 = st.columns([1, 2.5, 1.5, 2.5, 2.5])
+                                ka1, ka2 = f"m{m_idx}_d_pa1_{d}", f"m{m_idx}_d_pa2_{d}"
+                                kb1, kb2 = f"m{m_idx}_d_pb1_{d}", f"m{m_idx}_d_pb2_{d}"
+
+                                with c1: st.write(f"복식 {d + 1}")
+
+                                with c2:
+                                    p_a1 = st.selectbox(f"A1", get_avail_double(team_a_players, ka1), key=ka1,
                                                         label_visibility="collapsed")
-                            match_results.append(("S", p_a, s_a, s_b, p_b))
+                                    p_a2 = st.selectbox(f"A2", get_avail_double(team_a_players, ka2), key=ka2,
+                                                        label_visibility="collapsed")
 
-                    st.write("")
+                                with c3: res = st.radio("결과", ["승", "패"], horizontal=True, key=f"m{m_idx}_d_res_{d}",
+                                                        label_visibility="collapsed")
 
-                    # --- 복식 경기 섹션 ---
-                    if d_games > 0:
-                        # st.markdown("##### 👥 복식 경기")
-                        responsive_text(f"👥 복식 경기", pc_size="20px", mobile_size="16px")
-                        for d in range(d_games):
-                            c1, c2, c3, c4, c5 = st.columns([1, 2.5, 1.5, 2.5, 2.5])
-                            ka1, ka2 = f"m{m_idx}_d_pa1_{d}", f"m{m_idx}_d_pa2_{d}"
-                            kb1, kb2 = f"m{m_idx}_d_pb1_{d}", f"m{m_idx}_d_pb2_{d}"
+                                with c4:
+                                    sc = st.radio("점수", set_win_scores if res == "승" else set_lose_scores, horizontal=True,
+                                                  key=f"m{m_idx}_d_sc_{d}", label_visibility="collapsed")
+                                    s_a, s_b = map(int, sc.split(':'))
 
-                            with c1: st.write(f"복식 {d + 1}")
+                                with c5:
+                                    p_b1 = st.selectbox(f"B1", get_avail_double(team_b_players, kb1), key=kb1,
+                                                        label_visibility="collapsed")
+                                    p_b2 = st.selectbox(f"B2", get_avail_double(team_b_players, kb2), key=kb2,
+                                                        label_visibility="collapsed")
+                                match_results.append(("D", (p_a1, p_a2), s_a, s_b, (p_b1, p_b2)))
 
-                            with c2:
-                                p_a1 = st.selectbox(f"A1", get_avail_double(team_a_players, ka1), key=ka1,
-                                                    label_visibility="collapsed")
-                                p_a2 = st.selectbox(f"A2", get_avail_double(team_a_players, ka2), key=ka2,
-                                                    label_visibility="collapsed")
+                        if st.button("💾 상세 결과 저장", type="primary", width='stretch'):
+                            aw, bw = 0, 0
+                            # 🌟 [추가] 1경기일 경우 세트 스코어를 기억해둘 변수
+                            set_score_a, set_score_b = 0, 0
 
-                            with c3: res = st.radio("결과", ["승", "패"], horizontal=True, key=f"m{m_idx}_d_res_{d}",
-                                                    label_visibility="collapsed")
+                            for res in match_results:
+                                if res[0] == "S":
+                                    _, pa, sa, sb, pb = res
+                                    if pa != "선택안함" and pb != "선택안함":
+                                        # 개별 선수 점수판(ind_matrix)에 단순 경기승(1:0)이 아닌 입력된 실제 세트 결과(sa, sb) 저장
+                                        st.session_state.ind_matrix.loc[pa, pb] = sa
+                                        st.session_state.ind_matrix.loc[pb, pa] = sb
+                                        update_cumulative_record(pa, pb, sa, sb)
+                                    if sa > sb:
+                                        aw += 1
+                                    elif sb > sa:
+                                        bw += 1
 
-                            with c4:
-                                sc = st.radio("점수", set_win_scores if res == "승" else set_lose_scores, horizontal=True,
-                                              key=f"m{m_idx}_d_sc_{d}", label_visibility="collapsed")
-                                s_a, s_b = map(int, sc.split(':'))
+                                    # 🌟 현재 경기의 세트 스코어 임시 저장
+                                    set_score_a, set_score_b = sa, sb
+                                else:
+                                    _, _, sa, sb, _ = res
+                                    # 복식의 경우 현재 ind_matrix(개인 랭킹용)에는 미반영하되, 팀간 대결 스코어 카운트에는 반영
+                                    if sa > sb:
+                                        aw += 1
+                                    elif sb > sa:
+                                        bw += 1
 
-                            with c5:
-                                p_b1 = st.selectbox(f"B1", get_avail_double(team_b_players, kb1), key=kb1,
-                                                    label_visibility="collapsed")
-                                p_b2 = st.selectbox(f"B2", get_avail_double(team_b_players, kb2), key=kb2,
-                                                    label_visibility="collapsed")
-                            match_results.append(("D", (p_a1, p_a2), s_a, s_b, (p_b1, p_b2)))
+                                    # 🌟 현재 경기의 세트 스코어 임시 저장
+                                    set_score_a, set_score_b = sa, sb
 
-                    if st.button("💾 상세 결과 저장", type="primary", width='stretch'):
-                        aw, bw = 0, 0
-                        # 🌟 [추가] 1경기일 경우 세트 스코어를 기억해둘 변수
-                        set_score_a, set_score_b = 0, 0
+                                # 🌟 [수정 핵심] 조별 매트릭스(matrix)에 점수 기록
+                                # 단/복식 합이 1경기면 세트 스코어(예: 3:2)를 저장하고, 여러 경기면 경기 승수(예: 2:1)를 저장합니다.
+                                if is_single_or_double_one_game:
+                                    st.session_state.matrix.loc[team_a, team_b] = set_score_a
+                                    st.session_state.matrix.loc[team_b, team_a] = set_score_b
+                                else:
+                                    st.session_state.matrix.loc[team_a, team_b] = aw
+                                    st.session_state.matrix.loc[team_b, team_a] = bw
 
-                        for res in match_results:
-                            if res[0] == "S":
-                                _, pa, sa, sb, pb = res
-                                if pa != "선택안함" and pb != "선택안함":
-                                    # 개별 선수 점수판(ind_matrix)에 단순 경기승(1:0)이 아닌 입력된 실제 세트 결과(sa, sb) 저장
-                                    st.session_state.ind_matrix.loc[pa, pb] = sa
-                                    st.session_state.ind_matrix.loc[pb, pa] = sb
-                                    update_cumulative_record(pa, pb, sa, sb)
-                                if sa > sb:
-                                    aw += 1
-                                elif sb > sa:
-                                    bw += 1
+                            st.success("저장되었습니다!")
 
-                                # 🌟 현재 경기의 세트 스코어 임시 저장
-                                set_score_a, set_score_b = sa, sb
-                            else:
-                                _, _, sa, sb, _ = res
-                                # 복식의 경우 현재 ind_matrix(개인 랭킹용)에는 미반영하되, 팀간 대결 스코어 카운트에는 반영
-                                if sa > sb:
-                                    aw += 1
-                                elif sb > sa:
-                                    bw += 1
-
-                                # 🌟 현재 경기의 세트 스코어 임시 저장
-                                set_score_a, set_score_b = sa, sb
-
-                            # 🌟 [수정 핵심] 조별 매트릭스(matrix)에 점수 기록
-                            # 단/복식 합이 1경기면 세트 스코어(예: 3:2)를 저장하고, 여러 경기면 경기 승수(예: 2:1)를 저장합니다.
-                            if is_single_or_double_one_game:
-                                st.session_state.matrix.loc[team_a, team_b] = set_score_a
-                                st.session_state.matrix.loc[team_b, team_a] = set_score_b
-                            else:
-                                st.session_state.matrix.loc[team_a, team_b] = aw
-                                st.session_state.matrix.loc[team_b, team_a] = bw
-
-                        st.success("저장되었습니다!")
-
-                        # ★ 경기 결과 입력 시각 기록 (종료 예상 시간 계산용)
-                        if "result_timestamps" not in st.session_state:
-                            st.session_state.result_timestamps = []
-                        st.session_state.result_timestamps.append(datetime.now())
-
-                        # ★ 구글 시트 즉시 동기화 → 일반 회원 실시간 조회 가능
-                        save_room_state(st.session_state.room_name)   # 로컬 백업
-                        sync_match_state_to_gsheet(label="단체전결과")  # 구글 시트 동기화
-                        logger.info(f"단체전 결과 저장: {team_a} {aw}:{bw} {team_b}")
-                        st.rerun()
+                            save_room_state(st.session_state.room_name)  # 🌟 [수정 5-2] 단체전 점수 자동 저장
+                            st.rerun()
     else:
         st.info("조 편성이 완료되면 경기 배정표가 나타납니다.")
 
@@ -2109,8 +2019,7 @@ with tab_score:
                         st.success("전광판 스코어가 성공적으로 저장되었습니다.")
                         time.sleep(0.5)
 
-                        save_room_state(st.session_state.room_name)  # 로컬 백업
-                        sync_match_state_to_gsheet(label="스코어보드표수정")  # ★ 구글 시트 동기화
+                        save_room_state(st.session_state.room_name)  # 🌟 [수정 6-1] 표 수정 시 자동 저장
                         st.rerun()
 
             else:
@@ -2247,9 +2156,7 @@ with tab_score:
                             st.success("저장되었습니다.")
                             time.sleep(0.5)
 
-                            save_room_state(st.session_state.room_name)  # 로컬 백업
-                            sync_match_state_to_gsheet(label="스코어보드수동입력")  # ★ 구글 시트 동기화
-                            logger.info(f"스코어보드 수동 입력: {team_a} vs {team_b} = {sa}:{sb}")
+                            save_room_state(st.session_state.room_name)  # 🌟 [수정 6-2] 수동 입력 시 자동 저장
                             st.rerun()
 
             st.divider()
@@ -2274,8 +2181,7 @@ with tab_score:
                         st.success("개인 성적표가 수정 및 저장되었습니다.")
                         time.sleep(0.5)
 
-                        save_room_state(st.session_state.room_name)  # 로컬 백업
-                        sync_match_state_to_gsheet(label="개인성적표수정")  # ★ 구글 시트 동기화
+                        save_room_state(st.session_state.room_name)  # 🌟 [수정 6-3] 개인 성적표 수정 시 자동 저장
                         st.rerun()
                 else:
                     st.dataframe(st.session_state.ind_matrix.style.format(precision=0, na_rep='-'), width="stretch")
